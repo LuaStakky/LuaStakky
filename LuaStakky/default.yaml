@@ -1,0 +1,56 @@
+stakky_debug: false
+debug: false
+domain: '*'
+LuaConfig:
+  # write here all params passed Config lua module
+SMTP:
+  Email: ""
+  User: ""
+  Password: ""
+  Server: ""
+  Port: 465
+services:
+  Nginx:
+    worker_processes: 12
+    worker_connections: 8192
+    keepalive_timeout: 75
+    limit_rps:
+      /:
+        rps: 10
+        burst: 20
+        delay: nodelay
+        type: ip
+        mem: 10m
+      /api/ResetPassword:
+        rps: 2
+        burst: 0
+        delay: 0
+      #default values
+        #rps: 10
+        #burst: 20
+        #delay: nodelay
+        #type: ip
+        #mem: 2m
+    security:
+      allow_http: true
+      allow_https: true
+      ssl_certificates_file: none
+      ssl_session_cache: 10
+      ssl_certs_repo: https://curl.haxx.se/ca/cacert.pem
+    modules:
+      from_luarocks:
+        - lua-cmsgpack
+        - etlua
+        - inspect
+        - lua-resty-http
+        - lua-resty-mail
+        - lua-resty-cookie
+        #- luaminify
+    main: Main.lua
+    mount_points:
+      web_data: WebData
+      app: OpenRestyApp
+      modules:
+        - OpenRestyModules
+  tarantool:
+    

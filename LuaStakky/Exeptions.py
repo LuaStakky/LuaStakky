@@ -1,0 +1,2 @@
+class EConfigNotFound(Exception):
+    pass

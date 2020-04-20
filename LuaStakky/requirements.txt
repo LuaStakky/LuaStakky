@@ -1,0 +1,4 @@
+luaparser>=2.2.0
+gitignore-parser>=0.0.6
+HiYaPyCo>=0.4.16
+docker-compose>=1.25.4
