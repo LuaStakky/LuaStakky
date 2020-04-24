@@ -1,16 +1,19 @@
 from .BaseModule import StakkyContainerModule
-from .ConfigGenerators import ConfigGenerator, YamlSubConfGenerator, DockerFileGenerator, ConfigGenerators
+from .ConfigGenerators import STDConfigGenerator, DockerComposeConfigPartGenerator, DockerFileGenerator, \
+    ConfigGenerators
+from .Utils import gen_lua_path_part
 from os import path
 from .LuaConfigModule import LuaNginxConfigModuleGenerator
-from abc import ABC, abstractmethod
 
 
 class StakkyNginx(StakkyContainerModule):
-    class NginxConfigGenerator(ConfigGenerator):
-        _out_config = []
-        _tabs = 0
-        _limits = {}
-        _LIMIT_TYPE_TO_NGINX_LIMIT_TYPE = {"ip": '$binary_remote_addr'}
+    class NginxConfigGenerator(STDConfigGenerator):
+        def __init__(self, conf, subconf):
+            super().__init__(conf, subconf)
+            self._out_config = []
+            self._tabs = 0
+            self._limits = {}
+            self._LIMIT_TYPE_TO_NGINX_LIMIT_TYPE = {"ip": '$binary_remote_addr'}
 
         def add_param(self, data):
             self._out_config.append('\t' * self._tabs + ' '.join(map(str, data)) + ';')
@@ -41,8 +44,8 @@ class StakkyNginx(StakkyContainerModule):
 
         def _mk_main_server(self, http, https, local=False):
             if local:
-                http=True
-                https=False
+                http = True
+                https = False
             if http:
                 self.add_param(['listen', 80])
             if https:
@@ -59,7 +62,8 @@ class StakkyNginx(StakkyContainerModule):
             self.begin_section(['location', '/'])
 
             if local:
-                self.add_param(["access_by_lua","'if ngx.req.get_uri_args(0).Key==require(\"Config\").InternalKey then return end ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)'"])
+                self.add_param(["access_by_lua",
+                                "'if ngx.req.get_uri_args(0).Key==require(\"Config\").InternalKey then return end ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)'"])
             else:
                 self.add_param(self._limits['/'])
                 self.add_param(['limit_req_log_level', 'warn'])
@@ -91,7 +95,7 @@ class StakkyNginx(StakkyContainerModule):
             self.begin_section(['location', '/'])
             self.add_param(['root', "'/Site'"])
             self.add_param(['lua_code_cache', 'off'])
-            self.add_param(['rewrite_by_lua_file', '"' + path.join('/Site', self._subconf['main']) + '"'])
+            self.add_param(['rewrite_by_lua_file', '"' + path.join('/App', self._subconf['main']) + '"'])
             self.end_section()
 
             self.end_section()
@@ -132,7 +136,7 @@ class StakkyNginx(StakkyContainerModule):
             self._mk_main_server(not need_http_redirect, can_ssl)
             self._mk_main_server(True, False, local=True)
 
-        def analise_config(self):
+        def analyse_config(self):
             # main parameters
             self.add_param(["worker_processes", self._subconf["worker_processes"]])
             # error_log /var/log/nginx/error.log error;
@@ -177,11 +181,11 @@ class StakkyNginx(StakkyContainerModule):
                 self.add_param(limit_init_str)
                 i0 = i0 + 1
 
-            # ToDo fix modules path
-            gen_path_part = lambda str: str + '/?.lua;' + str + '/?/init.lua;'
             lua_package_path = '"'
-            for i in ['/AutoGenModules', '/SiteModules', '/usr/share/lua/'] + self._subconf['mount_points']['modules']:
-                lua_package_path = lua_package_path + gen_path_part(i)
+            for i in self._subconf['mount_points']['modules']:
+                lua_package_path = lua_package_path + gen_lua_path_part('/modules'+i if i.startswith(path.sep) else '/modules/' + i)
+            for i in ['/AutoGenModules', '/App', '/usr/share/lua/']:
+                lua_package_path = lua_package_path + gen_lua_path_part(i)
             self.add_param(['lua_package_path', lua_package_path + ';"'])
             self.add_param(['lua_package_cpath', '"/usr/lib/lua/5.1/?.so;/usr/lib/lua/5.1/loadall.so;;"'])
             self.add_param(['lua_ssl_protocols', 'SSLv3', 'TLSv1', 'TLSv1.1', 'TLSv1.2', 'SSLv2'])
@@ -206,9 +210,12 @@ class StakkyNginx(StakkyContainerModule):
 
     class NginxDockerFileGenerator(DockerFileGenerator):
         BASE_IMAGE = ['openresty', 'openresty', 'alpine-fat']
-        mount_points = dict()
 
-        def analise_config(self):
+        def __init__(self, conf, subconf):
+            super().__init__(conf, subconf)
+            self.mount_points = dict()
+
+        def analyse_config(self):
             self.add_run(['apk', 'add', 'git'])
             for i in self._subconf['modules']['from_luarocks']:
                 self.add_run(['luarocks', 'install', i])
@@ -219,30 +226,55 @@ class StakkyNginx(StakkyContainerModule):
             self.set_work_dir('/Site')
             self.set_cmd(["openresty", "-c", "/etc/nginx/nginx.conf"])
 
+    class NginxDockerComposeConfigGenerator(DockerComposeConfigPartGenerator):
+        service_name = 'nginx'
+
+        def __init__(self, conf, subconf, config_generators: ConfigGenerators, depends):
+            super().__init__(conf, subconf)
+            self._generators = config_generators
+            self._depends = depends
+
+        def analyse_config(self):
+            self.build_by_dockerfile(self._generators['DockerfileNginx'])
+            if self._depends and len(self._depends) > 0:
+                self.add_param(['depends_on', self._depends])
+
+            self.add_param(['ports', [str(self._subconf["net"]["http_port"])+":80", str(self._subconf["net"]["https_port"])+":443"]])
+            self.add_param(['depends_on', []])
+            # depends_on: tarantool, admin-panel
+
     NAME = "Nginx"
-    cacert_file = None
-    auto_gen_modules_dir = None
 
     def __init__(self, profile_name, conf, subconf, fs_controller):
-        super(StakkyNginx, self).__init__(profile_name, conf, subconf, fs_controller)
+        super().__init__(profile_name, conf, subconf, fs_controller)
+        self.cacert_file = None
+        self._docker_compose_generator = None
+        self._depends = []
+        self.auto_gen_modules_dir = self._fs_controller.mk_build_subdir('NginxAutoGenModules')
         self.config_generators = ConfigGenerators(fs_controller)
-        self.config_generators.add('Conf.lua', LuaNginxConfigModuleGenerator(self._conf))
+        self.config_generators.add(path.join(self.auto_gen_modules_dir.get_build_alias(), 'Conf.lua'),
+                                   LuaNginxConfigModuleGenerator(self._conf))
         self.config_generators.add('Nginx.conf', self.NginxConfigGenerator(self._conf, self._subconf))
         self.config_generators.add('DockerfileNginx', self.NginxDockerFileGenerator(self._conf, self._subconf))
+
+    def register_other_service(self, service, data):
+        if isinstance(service, StakkyContainerModule):
+            for i in service.get_containers():
+                self._depends.append(i.service_name)
 
     def mk_mount_points(self):
         result = {
             self.cacert_file.get_project_alias(): '/etc/nginx/cacert.pem',
             self.config_generators['Nginx.conf'].get_project_alias(): '/etc/nginx/nginx.conf',
             self.auto_gen_modules_dir.get_project_alias(): '/AutoGenModules',
-            self._subconf['mount_points']['app']: '/SiteModules',
+            self._subconf['mount_points']['app']: '/App',
             self._subconf['mount_points']['web_data']: '/Site'
         }
         if self._subconf['security']['allow_https'] and self._subconf['security']['ssl_certificates_file'] != 'none':
             result[self._subconf['security']['ssl_certificates_file']] = '/etc/nginx/Certificates'
 
         for i in self._subconf['mount_points']['modules']:
-            result[i] = i if i.startswith(path.sep) else path.sep + i
+            result[i] = '/modules'+i if i.startswith(path.sep) else '/modules/'+i
 
         self.config_generators['DockerfileNginx'].config.mount_points = result
 
@@ -250,13 +282,16 @@ class StakkyNginx(StakkyContainerModule):
         pass
 
     def get_containers(self):
-        return []
+        if not self._docker_compose_generator:
+            self._docker_compose_generator = self.NginxDockerComposeConfigGenerator(self._conf, self._subconf,
+                                                                                    self.config_generators,
+                                                                                    self._depends)
+        return [self._docker_compose_generator]
 
     def build(self):
         print('installing libs...')
         self.cacert_file = self._fs_controller.download_file(self._subconf['security']['ssl_certs_repo'], 'cacert.pem')
 
-        self.auto_gen_modules_dir = self._fs_controller.mk_build_subdir('NginxAutoGenModules')
         self._fs_controller.get_file_from_repo('Nginx/NginxTarantoolConnector.lua',
                                                path.join(self.auto_gen_modules_dir.get_build_alias(),
                                                          'NginxTarantoolConnector.lua'))

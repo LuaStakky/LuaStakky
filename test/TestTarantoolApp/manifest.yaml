@@ -1,0 +1,3 @@
+units:
+  Users:
+    sub_manifest: "manifest.yaml" # you can use sub_manifest to load config part from file

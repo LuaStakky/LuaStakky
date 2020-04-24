@@ -1,0 +1,21 @@
+imports:
+  #defult:
+  #  iproto_visible: all
+  #  globals_visible: file
+  #  files: # mandatory part
+  #    - ...
+  private:
+    iproto_visible: none # all, none or username (guest equal all)
+    globals_visible: global # file, unit, global
+    files:
+      - "_private/"
+  Admin:
+    iproto_visible: admin
+    globals_visible: global
+    files:
+      - Admin/
+  Guest:
+    iproto_visible: all
+    globals_visible: global
+    files:
+      - Guest/

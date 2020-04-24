@@ -1,14 +1,23 @@
-from .FsController import StakkyBuildFile
+from .FsController import StakkyBuildFile, StakkyFile, FsProfileController
 from hiyapyco import dump as yaml_dump
 from numbers import Number
 from abc import ABC, abstractmethod
-from .FsController import StakkyBuildFile
 import string
 
 
 # Config Generators
 
 class ConfigGenerator(ABC):
+    @abstractmethod
+    def analyse_config(self):
+        pass
+
+    @abstractmethod
+    def render_config(self):
+        pass
+
+
+class STDConfigGenerator(ConfigGenerator, ABC):
     def __init__(self, conf, subconf):
         self._conf = conf
         self._subconf = subconf
@@ -25,21 +34,14 @@ class ConfigGenerator(ABC):
     def end_section(self):
         pass
 
-    @abstractmethod
-    def analise_config(self):
-        pass
 
-    @abstractmethod
-    def render_config(self):
-        pass
-
-
-class LuaTableGenerator(ConfigGenerator, ABC):
-    _out_config = ['return {']
-    _tabs = 0
-
+class LuaTableGenerator(STDConfigGenerator, ABC):
     def __init__(self, conf, subconf):
         super().__init__(conf, subconf)
+        self._out_config = ['return {']
+        self._tabs = 0
+        if self._conf["stakky_debug"]:
+            self._tabs = 1
 
     @staticmethod
     def _py_value_to_lua(data):
@@ -49,7 +51,7 @@ class LuaTableGenerator(ConfigGenerator, ABC):
             else:
                 return "'" + data + "'"
         elif isinstance(data, Number):
-            return data
+            return str(data)
         else:
             raise Exception('unknown type')
 
@@ -61,6 +63,26 @@ class LuaTableGenerator(ConfigGenerator, ABC):
             if character not in string.ascii_letters + '_' + string.digits:
                 return False
         return True
+
+    def add_list(self, name, data):
+        if data is None:
+            data = name
+            name = ''
+        else:
+            if isinstance(name, str):
+                if not self._is_valid_var_name(name):
+                    if not "'" in name:
+                        name = "['" + name + "']"
+                    elif not '"' in name:
+                        name = '["' + name + '"]'
+            elif isinstance(name, Number):
+                name = "[" + str(name) + "]"
+            else:
+                raise Exception('unknown type')
+            name = name + '='
+
+        data = '{' + ','.join(list(map(lambda x: self._py_value_to_lua(x), data))) + '}'
+        self._out_config.append('\t' * self._tabs + name + data + ',')
 
     def add_param(self, name, data=None):
         if data is None:
@@ -105,19 +127,18 @@ class LuaTableGenerator(ConfigGenerator, ABC):
             self._out_config[-1] = self._out_config[-1][:-1]
         self._out_config.append(self._tabs * '\t' + '},')
 
-    def analise_config(self):
-        if self._conf["stakky_debug"]:
-            self._tabs = 1
-
     def render_config(self):
         return ('\n' if self._conf["stakky_debug"] else '').join(self._out_config + ['}'])
 
 
-class DockerFileGenerator(ConfigGenerator, ABC):
-    _out_config = []
+class DockerFileGenerator(STDConfigGenerator, ABC):
     BASE_IMAGE = []
-    _cmd = []
-    _work_dir = ''
+
+    def __init__(self, conf, subconf):
+        super().__init__(conf, subconf)
+        self._out_config = []
+        self._cmd = []
+        self._work_dir = ''
 
     def add_param(self, data):
         self._out_config.append(' '.join(data))
@@ -148,10 +169,12 @@ class DockerFileGenerator(ConfigGenerator, ABC):
                          (['CMD ' + str(self._cmd)] if len(self._cmd) > 0 else []))
 
 
-class YamlConfigGenerator(ConfigGenerator, ABC):
-    _out_config = {}
-    _curr_path = []
-    _curr_subconf = {}
+class YamlConfigGenerator(STDConfigGenerator, ABC):
+    def __init__(self, conf, subconf):
+        super().__init__(conf, subconf)
+        self._out_config = {}
+        self._curr_path = []
+        self._curr_subconf = {}
 
     def add_param(self, data):
         self._curr_subconf[data[0]] = data[1]
@@ -180,20 +203,51 @@ class YamlConfigGenerator(ConfigGenerator, ABC):
         self._curr_subconf = path_end
 
     def render_config(self):
-        last_el = self._curr_path.pop()
-        path_end = self._out_config
-        for i in self._curr_path:
-            path_end = path_end[i]
-        path_end[last_el] = self._curr_subconf
+        if len(self._curr_path) > 0:
+            last_el = self._curr_path.pop()
+            path_end = self._out_config
+            for i in self._curr_path:
+                path_end = path_end[i]
+            path_end[last_el] = self._curr_subconf
+        else:
+            self._out_config = self._curr_subconf
         self._curr_subconf = {}
         self._curr_path = []
-        return yaml_dump(self._out_config, default_flow_style=True)
+        return yaml_dump(self._out_config, default_flow_style=not self._conf["debug"])
 
 
-class YamlSubConfGenerator(YamlConfigGenerator, ABC):
+class YamlSubConfigGenerator(YamlConfigGenerator, ABC):
     def render_config(self):
         super().render_config()
         return self._out_config
+
+
+class DockerComposeConfigPartGenerator(YamlSubConfigGenerator, ABC):
+    service_name = ''
+
+    def build_by_dockerfile(self, file: StakkyFile):
+        self.begin_section('build')
+        self.add_param(['context', '.'])
+        self.add_param(['dockerfile', file.get_project_alias()])
+        self.end_section()
+
+
+class DockerComposeConfigGenerator(YamlConfigGenerator):
+    def __init__(self, conf):
+        super().__init__(conf, None)
+        self.services = dict()
+
+    def add_service(self, service: DockerComposeConfigPartGenerator):
+        self.services[service.service_name] = service
+
+    def analyse_config(self):
+        self.add_param(['version', '3'])
+
+        self.begin_section('services')
+        for k, i in self.services.items():
+            i.analyse_config()
+            self.add_subconf(k, i)
+        self.end_section()
 
 
 # ConfigGeneratorList & fs utils for it
@@ -206,18 +260,19 @@ class ConfigGenerators(dict):
 
         def build(self):
             with self.open('w') as f:
-                self.config.analise_config()
+                self.config.analyse_config()
                 f.write(self.config.render_config())
 
-    def __init__(self, fs):
+    def __init__(self, fs: FsProfileController):
         super(ConfigGenerators, self).__init__()
         self.fs = fs
 
-    def add(self, path, val):
+    def add(self, path, val: ConfigGenerator):
         self[path] = val
 
-    def __setitem__(self, path, val):
-        super(ConfigGenerators, self).__setitem__(path, self.StakkyConfigFile(self.fs.mk_build_file(path), self.fs, val))
+    def __setitem__(self, path, val: ConfigGenerator):
+        super(ConfigGenerators, self).__setitem__(path,
+                                                  self.StakkyConfigFile(self.fs.mk_build_filename(path), self.fs, val))
 
     def build(self):
         for i in self.values():

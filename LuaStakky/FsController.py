@@ -7,29 +7,36 @@ from abc import ABC, abstractmethod
 from gitignore_parser import parse_gitignore
 
 
-class StakkyFile(ABC):
-    def open(self, mode='r', buffering=-1, encoding=None, errors=None, newline=None, closefd=True, opener=None):
-        return open(self.get_global_alias(), mode=mode, buffering=buffering, encoding=encoding, errors=errors,
-                    newline=newline, closefd=closefd, opener=opener)
+# File&Folders classes
 
+class StakkyPath(ABC):
     # return path from build dir
     @abstractmethod
-    def get_build_alias(self):
+    def get_build_alias(self) -> str:
         pass
 
     # return path from work dir
     @abstractmethod
-    def get_project_alias(self):
+    def get_project_alias(self) -> str:
         pass
 
     # return path that can be open to read from python
     @abstractmethod
-    def get_global_alias(self):
+    def get_global_alias(self) -> str:
         pass
 
 
-# Temp build file (in .build folder)
-class StakkyBuildFile(StakkyFile):
+class StakkyDirectory(StakkyPath, ABC):
+    pass
+
+
+class StakkyFile(StakkyPath, ABC):
+    def open(self, mode='r', buffering=-1, encoding=None, errors=None, newline=None, closefd=True, opener=None):
+        return open(self.get_global_alias(), mode=mode, buffering=buffering, encoding=encoding, errors=errors,
+                    newline=newline, closefd=closefd, opener=opener)
+
+
+class StakkyBuildPath(StakkyPath, ABC):
     def __init__(self, path, fs_profile_controller):
         self._path = path
         self._fs_profile_controller = fs_profile_controller
@@ -42,6 +49,16 @@ class StakkyBuildFile(StakkyFile):
 
     def get_global_alias(self):
         return os.path.join(self._fs_profile_controller.build_dir, self._path)
+
+
+# Temp build directory (in .build folder)
+class StakkyBuildDirectory(StakkyDirectory, StakkyBuildPath):
+    pass
+
+
+# Temp build file (in .build folder)
+class StakkyBuildFile(StakkyFile, StakkyBuildPath):
+    pass
 
 
 # Project file
@@ -61,10 +78,10 @@ class StakkyProjectFile(StakkyFile):
 
 
 class FsProfileController:
-    _branch = 'master'
-    build_files = set()
-
     def __init__(self, profile_name, fs_controller=None, build_dir=os.path.join('.build', 'default')):
+        self._branch = 'master'
+        self.build_files = set()
+
         self.profile_name = profile_name
         self._fs_controller = fs_controller
         self.work_dir = fs_controller.work_dir
@@ -76,12 +93,15 @@ class FsProfileController:
 
         # clear last build
         if os.path.isdir(self.build_dir):
-            shutil.rmtree(self.build_dir)
-        os.mkdir(self.build_dir)
+            for i in Path(self.build_dir).glob('*'):
+                if i.is_dir():
+                    shutil.rmtree(i)
+                else:
+                    os.remove(str(i))
 
         fs_controller.try_add_to_gitignore(build_dir + os.path.sep)
 
-    def mk_build_subdir(self, subdir):
+    def mk_build_subdir(self, subdir) -> StakkyBuildDirectory:
         subdir_name = subdir
         i = 0
         while subdir_name in self.build_files:
@@ -92,9 +112,9 @@ class FsProfileController:
 
         if not os.path.isdir(os.path.join(self.build_dir, subdir_name)):
             os.mkdir(os.path.join(self.build_dir, subdir_name))
-        return StakkyBuildFile(subdir_name, self)
+        return StakkyBuildDirectory(subdir_name, self)
 
-    def mk_build_file(self, file):
+    def mk_build_filename(self, file) -> str:
         file_name = file
         i = 0
         while file_name in self.build_files:
@@ -105,8 +125,11 @@ class FsProfileController:
         Path(os.path.join(self.build_dir, file_name)).touch()
         return file_name
 
-    def download_file(self, url, path):
-        file = StakkyBuildFile(self.mk_build_file(path), self)
+    def mk_build_file(self, file) -> StakkyBuildFile:
+        return StakkyBuildFile(self.mk_build_filename(file), self)
+
+    def download_file(self, url, path) -> StakkyFile:
+        file = StakkyBuildFile(self.mk_build_filename(path), self)
         with file.open("wb") as f:
             print('Downloading ' + url)
             response = requests.get(url, stream=True)
@@ -120,22 +143,35 @@ class FsProfileController:
                 for data in response.iter_content(chunk_size=4096):
                     dl += len(data)
                     f.write(data)
-                    done = int(50 * min(dl / total_length,1))
+                    done = int(50 * min(dl / total_length, 1))
                     sys.stdout.write('\r[' + '=' * done + ' ' * (50 - done) + ']')
                     sys.stdout.flush()
                 sys.stdout.write('\n')
         return file
 
-    def get_file_from_repo(self, repo_path, path):
-        file = StakkyBuildFile(self.mk_build_file(path), self)
-        self.download_file('https://raw.githubusercontent.com/LuaStakky/LuaStakky-lib-repo/' + self._branch + '/' + repo_path, file.get_global_alias())
+    def get_file_from_repo(self, repo_path, path) -> StakkyFile:
+        file = StakkyBuildFile(self.mk_build_filename(path), self)
+        self.download_file(
+            'https://raw.githubusercontent.com/LuaStakky/LuaStakky-lib-repo/' + self._branch + '/' + repo_path,
+            file.get_global_alias())
         return file
+
+    def mk_compose_file(self):
+        f_name_begin = os.path.join(self.work_dir, 'docker-compose.')
+        if not (os.path.exists(f_name_begin + 'yaml') or os.path.exists(f_name_begin + 'yml')):
+            Path(f_name_begin + 'yaml').touch()
+        if f_name_begin + self.profile_name + '.yaml':
+            f_name = f_name_begin + self.profile_name + '.yaml'
+        elif f_name_begin + self.profile_name + '.yml':
+            f_name = f_name_begin + self.profile_name + '.yml'
+        else:
+            f_name = f_name_begin + self.profile_name + '.yaml'
+        return StakkyProjectFile(f_name, self)
 
 
 class FsController:
-    loaded_profiles = {}
-
     def __init__(self, work_dir='.'):
+        self.loaded_profiles = {}
         self.work_dir = work_dir
         if not os.path.exists(os.path.join(work_dir, '.build')):
             os.makedirs(os.path.join(work_dir, '.build'))

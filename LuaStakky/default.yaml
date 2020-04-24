@@ -11,6 +11,9 @@ SMTP:
   Port: 465
 services:
   Nginx:
+    net:
+      http_port: 80
+      https_port: 443
     worker_processes: 12
     worker_connections: 8192
     keepalive_timeout: 75
@@ -52,5 +55,20 @@ services:
       app: OpenRestyApp
       modules:
         - OpenRestyModules
-  tarantool:
+  Tarantool:
+    worker_processes: 12
+    worker_connections: 8192
+    keepalive_timeout: 75
+    #security:
+    #  ssl_certs_repo: https://curl.haxx.se/ca/cacert.pem
+    #  now unsupported
+    #modules:
+    #  from_luarocks:
+    #  now unsupported
+    apptype: advanced # trivial - simple lua app, advanced - app with stakky build system
+    main: manifest.yaml
+    mount_points:
+      app: TarantoolApp
+      modules:
+        - TarantoolModules
     

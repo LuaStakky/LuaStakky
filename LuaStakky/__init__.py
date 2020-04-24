@@ -2,29 +2,39 @@ from .FsController import FsController
 from .Nginx import StakkyNginx
 from .Tarantool import StakkyTarantool
 from .Exeptions import *
-# from luaparser import ast,printers
+from .BaseModule import StakkyContainerModule, StakkyModule
+from .ConfigGenerators import DockerComposeConfigGenerator
+from typing import Dict
 from hiyapyco import load as yaml_load
 import os
 
 
 class StakkyProfile:
-    config = []
-    services = {}
-    fs = None
-
-    def __init__(self, name, path, configs, services_register, fs_controller):
+    def __init__(self, name, path, confs, services_register, fs_controller):
+        self.services: Dict[str, StakkyModule] = {}
         self.name = name
         self._services_register = services_register
-        self.config = yaml_load([os.path.join(os.path.dirname(__file__),"default.yaml")]+configs)
+        self.conf = yaml_load([os.path.join(os.path.dirname(__file__), "default.yaml")] + confs)
         self.fs = fs_controller.get_profile_controller(name)
-        for k, curr_conf in self.config["services"].items():
+        for k, curr_conf in self.conf["services"].items():
             if curr_conf:
                 if "off" in curr_conf.keys():
                     if curr_conf["off"]:
                         continue
-                self.services[k] = services_register[k](name, self.config, curr_conf, self.fs)
+                self.services[k] = services_register[k](name, self.conf, curr_conf, self.fs)
         for i in self.services.values():
-            i.register_self_in_services(self.services)
+            for i0 in self.services.values():
+                if id(i) != id(i0):
+                    i.register_other_service(i0, i0.register_self_in_services(i))
+        self._docker_compose_config_generator = DockerComposeConfigGenerator(self.conf)
+        for i in self.services.values():
+            if isinstance(i, StakkyContainerModule):
+                for i0 in i.get_containers():
+                    self._docker_compose_config_generator.add_service(i0)
+        self._docker_compose_config_generator.analyse_config()
+
+        with self.fs.mk_compose_file().open('w') as f:
+            f.write(self._docker_compose_config_generator.render_config())
 
     def build(self):
         for i in self.services.values():
@@ -32,14 +42,13 @@ class StakkyProfile:
 
 
 class StakkyApp:
-    _services_register = {}
-    loaded_profiles = {}
-
-    def __init__(self, path=None, config=None):
+    def __init__(self, path=None, conf=None):
+        self._services_register = {}
+        self.loaded_profiles = {}
         self._path = path
         self.init_modules_register()
-        self._config = config
-        self._main_config_name = self._find_config(config if config else 'stakky')
+        self._conf = conf
+        self._main_config_name = self._find_config(conf if conf else 'stakky')
         self.fs = FsController(work_dir=path)
         if not self._main_config_name:
             raise EConfigNotFound()
@@ -59,7 +68,7 @@ class StakkyApp:
 
     def get_profile(self, name='default'):
         if name not in self.loaded_profiles:
-            second_conf = self._find_config((self._config if self._config else 'stakky') + '.' + name)
+            second_conf = self._find_config((self._conf if self._conf else 'stakky') + '.' + name)
             if name != 'default' and not second_conf:
                 raise EConfigNotFound()
             self.loaded_profiles[name] = StakkyProfile(name, self._path,

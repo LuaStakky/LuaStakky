@@ -3,16 +3,16 @@ from collections import OrderedDict
 from random import choice
 import string
 
-_internal_api_key = ''.join(choice('123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz') for i in range(64))
-_tarantool_admin_key = ''.join(choice('123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz') for i in range(64))
+_internal_api_key = ''.join(choice(string.ascii_letters+string.digits) for i in range(64))
+_tarantool_admin_key = ''.join(choice(string.ascii_letters+string.digits) for i in range(64))
 
 
 class LuaConfigModuleGenerator(LuaTableGenerator):
     def __init__(self, conf):
         super().__init__(conf, None)
 
-    def analise_config(self):
-        super().analise_config()
+    def analyse_config(self):
+        super().analyse_config()
 
         self.add_param('InternalKey', _internal_api_key)
         self.add_param('Domain', self._conf['domain'])
@@ -38,9 +38,7 @@ class LuaConfigModuleGenerator(LuaTableGenerator):
 
 
 class LuaNginxConfigModuleGenerator(LuaConfigModuleGenerator):
-    def analise_config(self):
-        super().analise_config()
-
+    def analyse_config(self):
         self.add_param('WebDataDir', "/Site")
 
         cfg = self._conf["SMTP"]
@@ -55,5 +53,5 @@ class LuaNginxConfigModuleGenerator(LuaConfigModuleGenerator):
 
 
 class LuaTarantoolConfigModuleGenerator(LuaConfigModuleGenerator):
-    def analise_config(self):
-        super().analise_config()
+    def analyse_config(self):
+        pass
