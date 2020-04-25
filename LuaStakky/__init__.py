@@ -5,8 +5,7 @@ from .Exeptions import *
 from .BaseModule import StakkyContainerModule, StakkyModule
 from .ConfigGenerators import DockerComposeConfigGenerator
 from typing import Dict
-from hiyapyco import load as yaml_load
-import os
+import hiyapyco, os
 
 
 class StakkyProfile:
@@ -14,7 +13,8 @@ class StakkyProfile:
         self.services: Dict[str, StakkyModule] = {}
         self.name = name
         self._services_register = services_register
-        self.conf = yaml_load([os.path.join(os.path.dirname(__file__), "default.yaml")] + confs)
+        self.conf = hiyapyco.load([os.path.join(os.path.dirname(__file__), "default.yaml")] + confs,
+                                  method=hiyapyco.METHOD_MERGE)
         self.fs = fs_controller.get_profile_controller(name)
         for k, curr_conf in self.conf["services"].items():
             if curr_conf:

@@ -3,7 +3,7 @@ from .ConfigGenerators import ConfigGenerator, LuaTableGenerator
 from hiyapyco import load as yaml_load
 import os
 from typing import List, Dict
-from luaparser import ast, printers
+from luaparser import ast
 from .Utils import gen_lua_path_part
 
 
@@ -67,7 +67,7 @@ class TarantoolTrivialAppEntry(TarantoolAppEntry):
     def __init__(self, conf, subconf, folder):
         super().__init__(conf, subconf, folder)
         self._calls = self.CallListGenerator(conf)
-        self.file = open(subconf["main"], 'r').read()
+        self.file = open(os.path.join(folder, subconf["main"]), 'r').read()
 
     def analyse_config(self):
         super().analyse_config()
@@ -143,7 +143,7 @@ class TarantoolAdvancedAppEntry(TarantoolAppEntry):
                         for call_list in call_lists:
                             call_list.add_call(name, params)
                         self._out_config.append('AddFunction(' + name + ', ' + env_name + '.' + name + ', ' +
-                                                ('true' if i["tarantool_user"] in ["guest", "all"] else 'false') + ')')
+                                                ('true' if i["iproto_visible"] in ["guest", "all"] else 'false') + ')')
 
                     if i["globals_visible"] == 'global':
                         self._out_config.append('''getmetatable(unit).__newindex=nil''')

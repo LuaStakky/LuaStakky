@@ -1,8 +1,7 @@
 from .FsController import StakkyBuildFile, StakkyFile, FsProfileController
-from hiyapyco import dump as yaml_dump
 from numbers import Number
 from abc import ABC, abstractmethod
-import string
+import string, hiyapyco
 
 
 # Config Generators
@@ -166,7 +165,7 @@ class DockerFileGenerator(STDConfigGenerator, ABC):
             self.BASE_IMAGE[2] if len(self.BASE_IMAGE) > 2 else 'latest')] +
                          self._out_config +
                          (['WORKDIR ' + str(self._work_dir)] if len(self._work_dir) > 0 else []) +
-                         (['CMD ' + str(self._cmd)] if len(self._cmd) > 0 else []))
+                         (['CMD ' + str(self._cmd).replace("'", '"')] if len(self._cmd) > 0 else []))
 
 
 class YamlConfigGenerator(STDConfigGenerator, ABC):
@@ -213,7 +212,7 @@ class YamlConfigGenerator(STDConfigGenerator, ABC):
             self._out_config = self._curr_subconf
         self._curr_subconf = {}
         self._curr_path = []
-        return yaml_dump(self._out_config, default_flow_style=not self._conf["debug"])
+        return hiyapyco.dump(self._out_config, default_flow_style=not self._conf["debug"])
 
 
 class YamlSubConfigGenerator(YamlConfigGenerator, ABC):

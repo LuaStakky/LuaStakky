@@ -56,9 +56,9 @@ services:
       modules:
         - OpenRestyModules
   Tarantool:
-    worker_processes: 12
-    worker_connections: 8192
-    keepalive_timeout: 75
+    #worker_processes: 12
+    #worker_connections: 8192
+    #keepalive_timeout: 75
     #security:
     #  ssl_certs_repo: https://curl.haxx.se/ca/cacert.pem
     #  now unsupported
