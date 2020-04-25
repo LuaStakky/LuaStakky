@@ -33,7 +33,7 @@ class StakkyTarantool(StakkyContainerModule):
         super().__init__(profile_name, conf, subconf, fs_controller)
         self.auto_gen_modules_dir = self._fs_controller.mk_build_subdir('TarantoolAutoGenModules')
         self.config_generators = ConfigGenerators(fs_controller)
-        self.config_generators.add(path.join(self.auto_gen_modules_dir.get_build_alias(), 'Conf.lua'), LuaTarantoolConfigModuleGenerator(self._conf))
+        self.config_generators.add(path.join(self.auto_gen_modules_dir.get_build_alias(), 'Config.lua'), LuaTarantoolConfigModuleGenerator(self._conf))
         print(subconf)
         self.config_generators.add('TarantoolEntry.lua', self.APP_BUILDERS[subconf["apptype"]](
             self._conf, self._subconf, path.join(fs_controller.work_dir, subconf['mount_points']['app'])))

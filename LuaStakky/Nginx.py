@@ -29,16 +29,32 @@ class StakkyNginx(StakkyContainerModule):
             self._out_config.append(self._tabs * '\t' + '}')
 
         def _parse_limit(self, limit, name):
+            def mk_delay(d):
+                return 'delay=' + str(d) if isinstance(d, int) and d != 0 else 'nodelay'
+
+            def mk_burst(b):
+                return 'burst=' + str(b) + ' ' if b != 0 else ''
+
             return ['limit_req_zone',
                     self._LIMIT_TYPE_TO_NGINX_LIMIT_TYPE[limit["type"] if "type" in limit else "ip"],
                     'zone=' + name + ':' + (limit["mem"] if "mem" in limit else "2m"),
                     'rate=' + str(limit["rps"] if "rps" in limit else 10) + 'r/s'], \
-                   ['limit_req', 'zone=' + name, 'burst=' + str(limit["burst"] if "burst" in limit else 20),
-                    str(limit['delay']) if "delay" in limit else 'nodelay']
+                   ['limit_req', 'zone=' + name,
+                    (mk_burst(limit['burst']) if "burst" in limit else '20') +
+                    (mk_delay(limit['delay']) if "burst" in limit and "delay" in limit else 'nodelay')]
+
+        def _begin_server(self, http=True, https=False):
+            self.begin_section(['server'])
+            domain = self._conf['domain']
+            if domain != '*':
+                self.add_param(['server_name', self._conf['domain']])
+            if http:
+                self.add_param(['listen', 80])
+            if https:
+                self.add_param(['listen', 443, 'ssl'])
 
         def _mk_http_redirect_server(self):
-            self.begin_section(['server'])
-            self.add_param(['server_name', self._conf['domain']])
+            self._begin_server()
             self.add_param(['return', '301', 'https://$host$request_uri'])
             self.end_section()
 
@@ -46,16 +62,13 @@ class StakkyNginx(StakkyContainerModule):
             if local:
                 http = True
                 https = False
-            if http:
-                self.add_param(['listen', 80])
-            if https:
-                self.add_param(['listen', 443, 'ssl'])
-            self.add_param(['server_name', 'nginx' if local else self._conf['domain']])
+            self._begin_server(http, https)
             if https:
                 self.add_param(['ssl_certificate', 'Certificates'])
                 self.add_param(['ssl_certificate_key', 'Certificates'])
                 self.add_param(['ssl_protocols', 'SSLv2', 'SSLv3', 'TLSv1', 'TLSv1.1', 'TLSv1.2'])
-                self.add_param(['ssl_session_cache', 'shared:SSL:' + str('ssl_session_cache') + 'm'])
+                self.add_param(
+                    ['ssl_session_cache', 'shared:SSL:' + str(self._subconf['security']['ssl_session_cache']) + 'm'])
             self.add_param(['resolver', '127.0.0.11', 'ipv6=off'])
             self.add_param(['charset', 'utf-8'])
 
@@ -76,7 +89,7 @@ class StakkyNginx(StakkyContainerModule):
                 self.add_param(['add_header', "'Access-Control-Allow-Headers'",
                                 "'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range'"])
                 self.add_param(['add_header', "'Access-Control-Max-Age'", 1728000])
-                self.add_param(['add_header', "'Content-Type'", 'text/plain; charset=utf-8'])
+                self.add_param(['add_header', "'Content-Type'", "'text/plain; charset=utf-8'"])
                 self.add_param(['add_header', "'Content-Length'", 0])
                 self.add_param(['return', 204])
                 self.end_section()
@@ -96,6 +109,8 @@ class StakkyNginx(StakkyContainerModule):
             self.add_param(['root', "'/Site'"])
             self.add_param(['lua_code_cache', 'off'])
             self.add_param(['rewrite_by_lua_file', '"' + path.join('/App', self._subconf['main']) + '"'])
+            self.end_section()
+
             self.end_section()
 
             self.end_section()
@@ -183,7 +198,8 @@ class StakkyNginx(StakkyContainerModule):
 
             lua_package_path = '"'
             for i in self._subconf['mount_points']['modules']:
-                lua_package_path = lua_package_path + gen_lua_path_part('/modules'+i if i.startswith(path.sep) else '/modules/' + i)
+                lua_package_path = lua_package_path + gen_lua_path_part(
+                    '/modules' + i if i.startswith(path.sep) else '/modules/' + i)
             for i in ['/AutoGenModules', '/App', '/usr/share/lua/']:
                 lua_package_path = lua_package_path + gen_lua_path_part(i)
             self.add_param(['lua_package_path', lua_package_path + ';"'])
@@ -200,9 +216,7 @@ class StakkyNginx(StakkyContainerModule):
 
             self._mk_servers()
 
-            '''
-                access_log /usr/local/openresty/nginx/logs/access.log;
-            '''
+            '''access_log /usr/local/openresty/nginx/logs/access.log;'''
             self.end_section()  # http
 
         def render_config(self):
@@ -239,7 +253,8 @@ class StakkyNginx(StakkyContainerModule):
             if self._depends and len(self._depends) > 0:
                 self.add_param(['depends_on', self._depends])
 
-            self.add_param(['ports', [str(self._subconf["net"]["http_port"])+":80", str(self._subconf["net"]["https_port"])+":443"]])
+            self.add_param(['ports', [str(self._subconf["net"]["http_port"]) + ":80",
+                                      str(self._subconf["net"]["https_port"]) + ":443"]])
             self.add_param(['depends_on', []])
             # depends_on: tarantool, admin-panel
 
@@ -252,7 +267,7 @@ class StakkyNginx(StakkyContainerModule):
         self._depends = []
         self.auto_gen_modules_dir = self._fs_controller.mk_build_subdir('NginxAutoGenModules')
         self.config_generators = ConfigGenerators(fs_controller)
-        self.config_generators.add(path.join(self.auto_gen_modules_dir.get_build_alias(), 'Conf.lua'),
+        self.config_generators.add(path.join(self.auto_gen_modules_dir.get_build_alias(), 'Config.lua'),
                                    LuaNginxConfigModuleGenerator(self._conf))
         self.config_generators.add('Nginx.conf', self.NginxConfigGenerator(self._conf, self._subconf))
         self.config_generators.add('DockerfileNginx', self.NginxDockerFileGenerator(self._conf, self._subconf))
@@ -274,7 +289,7 @@ class StakkyNginx(StakkyContainerModule):
             result[self._subconf['security']['ssl_certificates_file']] = '/etc/nginx/Certificates'
 
         for i in self._subconf['mount_points']['modules']:
-            result[i] = '/modules'+i if i.startswith(path.sep) else '/modules/'+i
+            result[i] = '/modules' + i if i.startswith(path.sep) else '/modules/' + i
 
         self.config_generators['DockerfileNginx'].config.mount_points = result
 
