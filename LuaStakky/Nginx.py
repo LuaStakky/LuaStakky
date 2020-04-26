@@ -44,14 +44,15 @@ class StakkyNginx(StakkyContainerModule):
                     (mk_burst(limit['burst']) if "burst" in limit else '20') +
                     (mk_delay(limit['delay']) if "burst" in limit and "delay" in limit else 'nodelay')]
 
-        def _begin_server(self, http=True, https=False, force_domain=None):
+        def _begin_server(self, http=True, https=False, force_domain=None, local=False):
             self.begin_section(['server'])
-            if force_domain:
-                domain = force_domain
-            else:
-                domain = self._conf['domain']
-            if domain != '*':
-                self.add_param(['server_name', domain])
+            if not local:
+                if force_domain:
+                    domain = force_domain
+                else:
+                    domain = self._conf['domain']
+                if domain != '*':
+                    self.add_param(['server_name', domain])
             if http:
                 self.add_param(['listen', 80])
             if https:
@@ -102,7 +103,7 @@ class StakkyNginx(StakkyContainerModule):
             if local:
                 http = True
                 https = False
-            self._begin_server(http, https)
+            self._begin_server(http, https, local=local)
             if https:
                 self.add_param(['ssl_certificate', 'Certificates'])
                 self.add_param(['ssl_certificate_key', 'Certificates'])
