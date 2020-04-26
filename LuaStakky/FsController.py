@@ -99,8 +99,6 @@ class FsProfileController:
                 else:
                     os.remove(str(i))
 
-        fs_controller.try_add_to_gitignore(build_dir + os.path.sep)
-
     def mk_build_subdir(self, subdir) -> StakkyBuildDirectory:
         subdir_name = subdir
         i = 0
@@ -157,6 +155,7 @@ class FsProfileController:
         return file
 
     def mk_compose_file(self):
+
         f_name_begin = os.path.join(self.work_dir, 'docker-compose.')
         if not (os.path.exists(f_name_begin + 'yaml') or os.path.exists(f_name_begin + 'yml')):
             Path(f_name_begin + 'yaml').touch()
@@ -166,6 +165,7 @@ class FsProfileController:
             f_name = f_name_begin + self.profile_name + '.yml'
         else:
             f_name = f_name_begin + self.profile_name + '.yaml'
+        self._fs_controller.try_add_to_gitignore(Path(f_name).name)
         return StakkyProjectFile(f_name, self)
 
 
@@ -179,16 +179,17 @@ class FsController:
         # IgnoreInit
         self._gitignore_path = os.path.join(work_dir, ".gitignore")
         self._reload_gitignore()
+        self.try_add_to_gitignore('.build/')
 
     def _reload_gitignore(self):
         self._gitignore = parse_gitignore(self._gitignore_path) if os.path.isfile(self._gitignore_path) else lambda \
                 x: False
 
     def try_add_to_gitignore(self, path):
-        if self._gitignore(os.path.join(self.work_dir, path)):
+        if not self._gitignore(os.path.join(self.work_dir, path)):
             # Ignore Update
             with open(self._gitignore_path, 'a') as gitignore:
-                gitignore.writelines([path])
+                gitignore.writelines(['\n'+path])
             self._reload_gitignore()
 
     def get_profile_controller(self, name):

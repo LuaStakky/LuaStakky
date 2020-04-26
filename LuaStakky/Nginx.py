@@ -91,7 +91,7 @@ class StakkyNginx(StakkyContainerModule):
 
                 access_control = server.get_access_control()
                 if access_control:
-                    self.add_param(['access_by_lua', access_control.replace('\\', '\\\\').replace("'", "\\'")])
+                    self.add_param(['access_by_lua', "'"+access_control.replace('\\', '\\\\').replace("'", "\\'")+"'"])
                 self.add_param(['access_log', 'off'])
                 self.add_param(['proxy_pass', 'http://'+container.service_name+'/'])
 
