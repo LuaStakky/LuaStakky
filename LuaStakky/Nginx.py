@@ -307,7 +307,7 @@ class StakkyNginx(StakkyContainerModule):
 
             mounts = []
             for k, i in self.mount_points.items():
-                mounts.append(k + ':' + i)
+                mounts.append(('' if k.startswith(('/', './')) else './')+k + ':' + i)
             self.add_param(['volumes', mounts])
 
     NAME = "Nginx"
@@ -315,7 +315,6 @@ class StakkyNginx(StakkyContainerModule):
     def __init__(self, profile_name, conf, subconf, fs_controller):
         super().__init__(profile_name, conf, subconf, fs_controller)
         self.cacert_file = None
-        self._docker_compose_generator = None
         self._depends = []
         self.auto_gen_modules_dir = self._fs_controller.mk_build_subdir('NginxAutoGenModules')
         self.config_generators = ConfigGenerators(fs_controller)
@@ -323,6 +322,9 @@ class StakkyNginx(StakkyContainerModule):
                                    LuaNginxConfigModuleGenerator(self._conf))
         self.config_generators.add('Nginx.conf', self.NginxConfigGenerator(self._conf, self._subconf))
         self.config_generators.add('DockerfileNginx', self.NginxDockerFileGenerator(self._conf, self._subconf))
+        self._docker_compose_generator = self.NginxDockerComposeConfigGenerator(self._conf, self._subconf,
+                                                                                self.config_generators,
+                                                                                self._depends)
 
     def register_other_service(self, service, data):
         if isinstance(service, StakkyContainerModule):
@@ -350,11 +352,6 @@ class StakkyNginx(StakkyContainerModule):
             self._docker_compose_generator.mount_points = result
 
     def get_containers(self):
-        if not self._docker_compose_generator:
-            self._docker_compose_generator = self.NginxDockerComposeConfigGenerator(self._conf, self._subconf,
-                                                                                    self.config_generators,
-                                                                                    self._depends)
-
         return [self._docker_compose_generator]
 
     def build(self):

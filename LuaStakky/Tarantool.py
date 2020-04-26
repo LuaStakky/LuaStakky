@@ -38,7 +38,7 @@ class StakkyTarantool(StakkyContainerModule):
 
             mounts = ['./DB:/var/lib/tarantool']
             for k, i in self.mount_points.items():
-                mounts.append(k+':'+i)
+                mounts.append(('' if k.startswith(('/', './')) else './')+k+':'+i)
             self.add_param(['volumes', mounts])
 
     NAME = "Tarantool"
@@ -48,7 +48,6 @@ class StakkyTarantool(StakkyContainerModule):
     }
 
     def __init__(self, profile_name, conf, subconf, fs_controller):
-        self._docker_compose_generator = None
         super().__init__(profile_name, conf, subconf, fs_controller)
         self.auto_gen_modules_dir = self._fs_controller.mk_build_subdir('TarantoolAutoGenModules')
         self.config_generators = ConfigGenerators(fs_controller)
@@ -57,6 +56,8 @@ class StakkyTarantool(StakkyContainerModule):
         self.config_generators.add('TarantoolEntry.lua', self.APP_BUILDERS[subconf["apptype"]](
             self._conf, self._subconf, path.join(fs_controller.work_dir, subconf['mount_points']['app'])))
         self.config_generators.add('DockerfileTarantool', self.TarantoolDockerFileGenerator(self._conf, self._subconf))
+        self._docker_compose_generator = self.TarantoolDockerComposeConfigGenerator(self._conf, self._subconf,
+                                                                                    self.config_generators)
 
     def mk_mount_points(self):
         result = {
@@ -75,10 +76,6 @@ class StakkyTarantool(StakkyContainerModule):
             self._docker_compose_generator.mount_points = result
 
     def get_containers(self):
-        if not self._docker_compose_generator:
-            self._docker_compose_generator = self.TarantoolDockerComposeConfigGenerator(self._conf, self._subconf,
-                                                                                        self.config_generators)
-
         return [self._docker_compose_generator]
 
     def build(self):

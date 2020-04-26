@@ -27,6 +27,12 @@ class StakkyProfile:
             for i0 in self.services.values():
                 if id(i) != id(i0):
                     i.register_other_service(i0, i0.register_self_in_services(i))
+        self._docker_compose_config_generator = None
+
+    def build(self):
+        for i in self.services.values():
+            i.build()
+
         self._docker_compose_config_generator = DockerComposeConfigGenerator(self.conf)
         for i in self.services.values():
             if isinstance(i, StakkyContainerModule):
@@ -36,10 +42,6 @@ class StakkyProfile:
 
         with self.fs.mk_compose_file().open('w') as f:
             f.write(self._docker_compose_config_generator.render_config())
-
-    def build(self):
-        for i in self.services.values():
-            i.build()
 
 
 class StakkyApp:
