@@ -11,6 +11,7 @@ SMTP:
   Port: 465
 services:
   Nginx:
+    simple_log: true
     net:
       http_port: 80
       https_port: 443

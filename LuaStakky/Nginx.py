@@ -212,12 +212,13 @@ class StakkyNginx(StakkyContainerModule):
             # http
             self.begin_section(['http'])
 
+            if self._subconf["simple_log"]:
+                self.add_param(['log_format', 'main', """'$remote_addr [$time_local] "$request" '
+                          '$status $body_bytes_sent "$http_referer" '"""])
+                self.add_param(['access_log', '/usr/local/openresty/nginx/logs/access.log', 'main'])
+
             # ToDo decide whether it is necessary:
             '''
-            log_format  main  '$remote_addr [$time_local] "$request" '
-                      '$status $body_bytes_sent "$http_referer" ';
-            access_log /usr/local/openresty/nginx/logs/access.log main;
-        
             ssl_session_cache shared:SSL:10m;
             ssl_session_timeout 10m;
             '''
