@@ -40,7 +40,7 @@ class TarantoolAppEntry(ConfigGenerator, ABC):
         self._folder = folder
 
     def analyse_config(self):
-        lua_path = "/opt/tarantool/?.lua;/opt/tarantool/?/init.lua;"
+        lua_path = gen_lua_path_part('/opt/tarantool')+gen_lua_path_part('/opt/AutoGenModules')
         for i in self._subconf["mount_points"]["modules"]:
             lua_path = lua_path + gen_lua_path_part(
                 '/modules' + i if i.startswith(os.path.sep) else '/modules/' + i)
@@ -53,7 +53,7 @@ class TarantoolAppEntry(ConfigGenerator, ABC):
         self._pre_config.append("    vinyl_dir = 'Vinyl'")
         self._pre_config.append("}")
 
-        self._pre_config.append("console.listen('/var/lib/tarantool/admin.sock')")
+        self._pre_config.append("require('console').listen('/var/lib/tarantool/admin.sock')")
 
     @abstractmethod
     def get_open_call_list(self):

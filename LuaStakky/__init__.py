@@ -1,6 +1,7 @@
 from .FsController import FsController
 from .Nginx import StakkyNginx
 from .Tarantool import StakkyTarantool
+from .AdminPanel import StakkyAdminPanel
 from .Exeptions import *
 from .BaseModule import StakkyContainerModule, StakkyModule
 from .ConfigGenerators import DockerComposeConfigGenerator
@@ -65,6 +66,7 @@ class StakkyApp:
     def init_modules_register(self):
         self.register_service(StakkyNginx)
         self.register_service(StakkyTarantool)
+        self.register_service(StakkyAdminPanel)
 
     def get_profile(self, name='default'):
         if name not in self.loaded_profiles:

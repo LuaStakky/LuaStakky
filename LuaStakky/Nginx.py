@@ -1,4 +1,4 @@
-from .BaseModule import StakkyContainerModule
+from .BaseModule import *
 from .ConfigGenerators import STDConfigGenerator, DockerComposeConfigPartGenerator, DockerFileGenerator, \
     ConfigGenerators
 from .Utils import gen_lua_path_part
@@ -14,6 +14,7 @@ class StakkyNginx(StakkyContainerModule):
             self._tabs = 0
             self._limits = {}
             self._LIMIT_TYPE_TO_NGINX_LIMIT_TYPE = {"ip": '$binary_remote_addr'}
+            self.redirect_servers = []
 
         def add_param(self, data):
             self._out_config.append('\t' * self._tabs + ' '.join(map(str, data)) + ';')
@@ -43,11 +44,14 @@ class StakkyNginx(StakkyContainerModule):
                     (mk_burst(limit['burst']) if "burst" in limit else '20') +
                     (mk_delay(limit['delay']) if "burst" in limit and "delay" in limit else 'nodelay')]
 
-        def _begin_server(self, http=True, https=False):
+        def _begin_server(self, http=True, https=False, force_domain=None):
             self.begin_section(['server'])
-            domain = self._conf['domain']
+            if force_domain:
+                domain = force_domain
+            else:
+                domain = self._conf['domain']
             if domain != '*':
-                self.add_param(['server_name', self._conf['domain']])
+                self.add_param(['server_name', domain])
             if http:
                 self.add_param(['listen', 80])
             if https:
@@ -57,6 +61,42 @@ class StakkyNginx(StakkyContainerModule):
             self._begin_server()
             self.add_param(['return', '301', 'https://$host$request_uri'])
             self.end_section()
+
+        def _mk_redirect_server(self, server: StakkySubdomainContainerModule):
+            container = server.get_containers()[0]
+            if container:
+                security = server.get_security()
+                if 'allow_http' in security.keys():
+                    http = security['allow_http']
+                else:
+                    http = False
+                if 'allow_https' in security.keys():
+                    https = security['allow_https']
+                else:
+                    https = True
+
+                self._begin_server(http=http, https=https, force_domain=server.get_domain())
+
+                if https:
+                    self.add_param(['ssl_certificate', 'Certificates'])
+                    self.add_param(['ssl_certificate_key', 'Certificates'])
+                    self.add_param(['ssl_protocols', 'SSLv2', 'SSLv3', 'TLSv1', 'TLSv1.1', 'TLSv1.2'])
+                    if 'ssl_session_cache' in security.keys():
+                        self.add_param(['ssl_session_cache', 'shared:SSL:' + str(security['ssl_session_cache']) + 'm'])
+
+                self.add_param(['resolver', '127.0.0.11', '8.8.8.8', 'ipv6=off'])
+                self.add_param(['charset', 'utf-8'])
+
+                self.begin_section(['location', '/'])
+
+                access_control = server.get_access_control()
+                if access_control:
+                    self.add_param(['access_by_lua', access_control.replace('\\', '\\\\').replace("'", "\\'")])
+                self.add_param(['access_log', 'off'])
+                self.add_param(['proxy_pass', 'http://'+container.service_name+'/'])
+
+                self.end_section()
+                self.end_section()
 
         def _mk_main_server(self, http, https, local=False):
             if local:
@@ -69,7 +109,7 @@ class StakkyNginx(StakkyContainerModule):
                 self.add_param(['ssl_protocols', 'SSLv2', 'SSLv3', 'TLSv1', 'TLSv1.1', 'TLSv1.2'])
                 self.add_param(
                     ['ssl_session_cache', 'shared:SSL:' + str(self._subconf['security']['ssl_session_cache']) + 'm'])
-            self.add_param(['resolver', '127.0.0.11', 'ipv6=off'])
+            self.add_param(['resolver', '127.0.0.11', '8.8.8.8', 'ipv6=off'])
             self.add_param(['charset', 'utf-8'])
 
             self.begin_section(['location', '/'])
@@ -150,6 +190,8 @@ class StakkyNginx(StakkyContainerModule):
             '''
             self._mk_main_server(not need_http_redirect, can_ssl)
             self._mk_main_server(True, False, local=True)
+            for i in self.redirect_servers:
+                self._mk_redirect_server(i)
 
         def analyse_config(self):
             # main parameters
@@ -247,6 +289,7 @@ class StakkyNginx(StakkyContainerModule):
             super().__init__(conf, subconf)
             self._generators = config_generators
             self._depends = depends
+            self.mount_points = {}
 
         def analyse_config(self):
             self.build_by_dockerfile(self._generators['DockerfileNginx'])
@@ -255,8 +298,15 @@ class StakkyNginx(StakkyContainerModule):
 
             self.add_param(['ports', [str(self._subconf["net"]["http_port"]) + ":80",
                                       str(self._subconf["net"]["https_port"]) + ":443"]])
-            self.add_param(['depends_on', []])
+
             # depends_on: tarantool, admin-panel
+            if self._depends and len(self._depends) > 0:
+                self.add_param(['depends_on', self._depends])
+
+            mounts = []
+            for k, i in self.mount_points.items():
+                mounts.append(k + ':' + i)
+            self.add_param(['volumes', mounts])
 
     NAME = "Nginx"
 
@@ -274,6 +324,8 @@ class StakkyNginx(StakkyContainerModule):
 
     def register_other_service(self, service, data):
         if isinstance(service, StakkyContainerModule):
+            if isinstance(service, StakkySubdomainContainerModule):
+                self.config_generators['Nginx.conf'].config.redirect_servers.append(service)
             for i in service.get_containers():
                 self._depends.append(i.service_name)
 
@@ -292,15 +344,15 @@ class StakkyNginx(StakkyContainerModule):
             result[i] = '/modules' + i if i.startswith(path.sep) else '/modules/' + i
 
         self.config_generators['DockerfileNginx'].config.mount_points = result
-
-    def render_docker_compose_config(self):
-        pass
+        if self._conf['debug']:
+            self._docker_compose_generator.mount_points = result
 
     def get_containers(self):
         if not self._docker_compose_generator:
             self._docker_compose_generator = self.NginxDockerComposeConfigGenerator(self._conf, self._subconf,
                                                                                     self.config_generators,
                                                                                     self._depends)
+
         return [self._docker_compose_generator]
 
     def build(self):

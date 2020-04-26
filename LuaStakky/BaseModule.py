@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Iterable
+from typing import List
 from .ConfigGenerators import DockerComposeConfigPartGenerator
 
 class StakkyModule(ABC):
@@ -24,5 +24,18 @@ class StakkyModule(ABC):
 
 class StakkyContainerModule(StakkyModule, ABC):
     @abstractmethod
-    def get_containers(self) -> Iterable[DockerComposeConfigPartGenerator]:
+    def get_containers(self) -> List[DockerComposeConfigPartGenerator]:
         pass
+
+
+class StakkySubdomainContainerModule(StakkyContainerModule, ABC):
+    @abstractmethod
+    def get_domain(self):
+        pass
+
+    @abstractmethod
+    def get_security(self):
+        pass
+
+    def get_access_control(self):
+        return None

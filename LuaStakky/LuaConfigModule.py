@@ -40,7 +40,7 @@ class LuaConfigModuleGenerator(LuaTableGenerator):
 class LuaNginxConfigModuleGenerator(LuaConfigModuleGenerator):
     def analyse_config(self):
         super().analyse_config()
-        
+
         self.add_param('WebDataDir', "/Site")
 
         cfg = self._conf["SMTP"]
@@ -55,5 +55,6 @@ class LuaNginxConfigModuleGenerator(LuaConfigModuleGenerator):
 
 
 class LuaTarantoolConfigModuleGenerator(LuaConfigModuleGenerator):
-    def analyse_config(self):
-        pass
+    pass
+    #def analyse_config(self):
+        #pass
