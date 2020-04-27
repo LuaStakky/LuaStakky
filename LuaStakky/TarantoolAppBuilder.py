@@ -53,6 +53,8 @@ class TarantoolAppEntry(ConfigGenerator, ABC):
         self._pre_config.append("    vinyl_dir = 'Vinyl'")
         self._pre_config.append("}")
 
+        self._pre_config.append("box.schema.user.passwd(Cfg.Tarantool.AdminPassword)")
+
         self._pre_config.append("require('console').listen('/var/lib/tarantool/admin.sock')")
 
     @abstractmethod
