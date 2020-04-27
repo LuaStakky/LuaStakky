@@ -46,13 +46,15 @@ class StakkyNginx(StakkyContainerModule):
 
         def _begin_server(self, http=True, https=False, force_domain=None, local=False):
             self.begin_section(['server'])
-            if not local:
+            if local:
+                domain = 'nginx'
+            else:
                 if force_domain:
                     domain = force_domain
                 else:
                     domain = self._conf['domain']
-                if domain != '*':
-                    self.add_param(['server_name', domain])
+            if domain != '*':
+                self.add_param(['server_name', domain])
             if http:
                 self.add_param(['listen', 80])
             if https:
