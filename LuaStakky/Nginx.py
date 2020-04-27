@@ -150,7 +150,8 @@ class StakkyNginx(StakkyContainerModule):
 
             self.begin_section(['location', '/'])
             self.add_param(['root', "'/Site'"])
-            self.add_param(['lua_code_cache', 'off'])
+            if self._conf["debug"]:
+                self.add_param(['lua_code_cache', 'off'])
             self.add_param(['rewrite_by_lua_file', '"' + path.join('/App', self._subconf['main']) + '"'])
             self.end_section()
 
