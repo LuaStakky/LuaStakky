@@ -53,8 +53,10 @@ class LuaNginxConfigModuleGenerator(LuaConfigModuleGenerator):
         self.add_param('Port', cfg['Port'])
         self.end_section()
 
+        self.add_param('CurrInstanceType', 'Nginx')
+
 
 class LuaTarantoolConfigModuleGenerator(LuaConfigModuleGenerator):
-    pass
-    #def analyse_config(self):
-        #pass
+    def analyse_config(self):
+        super().analyse_config()
+        self.add_param('CurrInstanceType', 'Tarantool')
