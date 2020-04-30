@@ -57,8 +57,6 @@ class StakkyTarantool(StakkyContainerModule):
 
         self.config_generators.add('TarantoolEntry.lua', self.APP_BUILDERS[subconf["apptype"]](
             self._conf, self._subconf, path.join(fs_controller.work_dir, subconf['mount_points']['app'])))
-        self.config_generators.add(path.join(self.auto_gen_modules_dir.get_build_alias(), 'TarantoolApi_Calls.lua'),
-                                   self.config_generators['TarantoolEntry.lua'].config.get_open_call_list())
 
         self.config_generators.add('DockerfileTarantool', self.TarantoolDockerFileGenerator(self._conf, self._subconf))
         self._docker_compose_generator = self.TarantoolDockerComposeConfigGenerator(self._conf, self._subconf,

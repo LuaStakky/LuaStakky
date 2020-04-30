@@ -1,6 +1,7 @@
 from .BaseModule import *
 from .ConfigGenerators import STDConfigGenerator, DockerComposeConfigPartGenerator, DockerFileGenerator, \
     ConfigGenerators
+from .Tarantool import StakkyTarantool
 from .Utils import gen_lua_path_part
 from os import path
 from .LuaConfigModule import LuaNginxConfigModuleGenerator
@@ -333,6 +334,9 @@ class StakkyNginx(StakkyContainerModule):
         if isinstance(service, StakkyContainerModule):
             if isinstance(service, StakkySubdomainContainerModule):
                 self.config_generators['Nginx.conf'].config.redirect_servers.append(service)
+            if isinstance(service, StakkyTarantool):
+                self.config_generators.add(path.join(self.auto_gen_modules_dir.get_build_alias(), 'TarantoolApi_Calls.lua'),
+                                           service.config_generators['TarantoolEntry.lua'].config.get_open_call_list())
             for i in service.get_containers():
                 self._depends.append(i.service_name)
 
