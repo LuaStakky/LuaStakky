@@ -22,7 +22,7 @@ class LuaConfigModuleGenerator(LuaTableGenerator):
         self.add_param('AdminPassword', _tarantool_admin_key)
         self.add_param('Host', 'tarantool')
         self.add_param('Port', 3301)
-        self.add_param('Timeout', 2000)
+        self.add_param('Timeout', 60000)
         self.end_section()
 
         def copy_from_yaml(subconf):
