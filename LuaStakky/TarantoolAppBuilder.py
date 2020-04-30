@@ -25,6 +25,7 @@ class TarantoolAppEntry(ConfigGenerator, ABC):
             self.call_list: Dict[str, List[str]] = {}
 
         def analyse_config(self):
+            print(self.call_list)
             super().analyse_config()
 
             for k, i in self.call_list.items():

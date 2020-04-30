@@ -2,7 +2,9 @@ from abc import ABC, abstractmethod
 from typing import List
 from .ConfigGenerators import DockerComposeConfigPartGenerator
 
+
 class StakkyModule(ABC):
+    priority = 0
     NAME = ""
 
     def __init__(self, profile_name, conf, subconf, fs_controller):

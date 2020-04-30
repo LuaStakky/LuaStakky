@@ -314,6 +314,7 @@ class StakkyNginx(StakkyContainerModule):
                 mounts.append(('' if k.startswith(('/', './')) else './')+k + ':' + i)
             self.add_param(['volumes', mounts])
 
+    priority = -1000
     NAME = "Nginx"
 
     def __init__(self, profile_name, conf, subconf, fs_controller):

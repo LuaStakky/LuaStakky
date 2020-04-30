@@ -7,6 +7,7 @@ from .BaseModule import StakkyContainerModule, StakkyModule
 from .ConfigGenerators import DockerComposeConfigGenerator
 from typing import Dict
 import hiyapyco, os
+import operator
 
 
 class StakkyProfile:
@@ -23,18 +24,18 @@ class StakkyProfile:
                     if curr_conf["off"]:
                         continue
                 self.services[k] = services_register[k](name, self.conf, curr_conf, self.fs)
-        for i in self.services.values():
-            for i0 in self.services.values():
+        for i in sorted(self.services.values(), key=operator.attrgetter('priority'), reverse=True):
+            for i0 in sorted(self.services.values(), key=operator.attrgetter('priority'), reverse=True):
                 if id(i) != id(i0):
                     i.register_other_service(i0, i0.register_self_in_services(i))
         self._docker_compose_config_generator = None
 
     def build(self):
-        for i in self.services.values():
+        for i in sorted(self.services.values(), key=operator.attrgetter('priority'), reverse=True):
             i.build()
 
         self._docker_compose_config_generator = DockerComposeConfigGenerator(self.conf)
-        for i in self.services.values():
+        for i in sorted(self.services.values(), key=operator.attrgetter('priority'), reverse=True):
             if isinstance(i, StakkyContainerModule):
                 for i0 in i.get_containers():
                     self._docker_compose_config_generator.add_service(i0)
