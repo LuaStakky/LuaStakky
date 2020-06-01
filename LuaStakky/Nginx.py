@@ -140,11 +140,20 @@ class StakkyNginx(StakkyContainerModule):
 
                 for k, i in self._limits.items():
                     if k != '/':
-                        self.begin_section(['location', k])
-                        self.add_param(i)
-                        self.end_section()
+                        if not k.startswith('/api/'):
+                            self.begin_section(['location', k])
+                            self.add_param(i)
+                            self.end_section()
 
                 self.begin_section(['location', '/api/'])
+
+                for k, i in self._limits.items():
+                    if k != '/':
+                        if k.startswith('/api/'):
+                            self.begin_section(['location', k])
+                            self.add_param(i)
+                            self.end_section()
+
                 self.add_param(['rewrite_by_lua', """'require("NginxTarantoolConnector")(ngx)'"""])
                 self.add_param(['expires', 'off'])
                 self.end_section()
