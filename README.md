@@ -1,4 +1,4 @@
-# LuaStakky-cli
+# LuaStakky
 LuaStakky - full stack lua web framework
 
 ## What's under the hood?
