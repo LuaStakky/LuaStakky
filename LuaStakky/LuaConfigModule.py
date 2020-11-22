@@ -26,13 +26,14 @@ class LuaConfigModuleGenerator(LuaTableGenerator):
         self.end_section()
 
         def copy_from_yaml(subconf):
-            for k, i in subconf.items():
-                if isinstance(i, OrderedDict):
-                    self.begin_section(k)
-                    copy_from_yaml(i)
-                    self.end_section()
-                else:
-                    self.add_param(k, i)
+            if subconf:
+                for k, i in subconf.items():
+                    if isinstance(i, OrderedDict):
+                        self.begin_section(k)
+                        copy_from_yaml(i)
+                        self.end_section()
+                    else:
+                        self.add_param(k, i)
 
         copy_from_yaml(self._conf['LuaConfig'])
 

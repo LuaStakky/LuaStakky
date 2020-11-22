@@ -84,3 +84,4 @@ class StakkyApp:
 
     def build(self, profile='default'):
         self.get_profile(profile).build()
+        self.fs.post_build_hook()

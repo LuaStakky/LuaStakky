@@ -1,9 +1,11 @@
 import os
 import requests
-import sys
 import shutil
-from pathlib import Path
+import stat
+import sys
 from abc import ABC, abstractmethod
+from pathlib import Path
+
 from gitignore_parser import parse_gitignore
 
 
@@ -155,7 +157,6 @@ class FsProfileController:
         return file
 
     def mk_compose_file(self):
-
         f_name_begin = os.path.join(self.work_dir, 'docker-compose.')
         if not (os.path.exists(f_name_begin + 'yaml') or os.path.exists(f_name_begin + 'yml')):
             Path(f_name_begin + 'yaml').touch()
@@ -180,6 +181,10 @@ class FsController:
         self._gitignore_path = os.path.join(work_dir, ".gitignore")
         self._reload_gitignore()
         self.try_add_to_gitignore('.build/')
+        self.try_add_to_gitignore('DB/admin.sock1')
+        for i in ['DB/MemTX', 'DB/WAL', 'DB/Vinyl']:
+            self.try_add_to_gitignore(i)
+            self.try_create_folder(i)
 
     def _reload_gitignore(self):
         self._gitignore = parse_gitignore(self._gitignore_path) if os.path.isfile(self._gitignore_path) else lambda \
@@ -192,8 +197,21 @@ class FsController:
                 gitignore.writelines(['\n'+path])
             self._reload_gitignore()
 
+    def try_create_folder(self, path):
+        if not os.path.exists(os.path.join(self.work_dir, path)):
+            os.mkdir(os.path.join(self.work_dir, path))
+
     def get_profile_controller(self, name):
         if name not in self.loaded_profiles:
             self.loaded_profiles[name] = FsProfileController(name, fs_controller=self,
                                                              build_dir=os.path.join('.build', name))
         return self.loaded_profiles[name]
+
+    @staticmethod
+    def post_build_hook():
+        for root, dirs, files in os.walk('.build/'):
+            for dir in dirs:
+                os.chmod(os.path.join(root, dir),0o755)
+            for file in files:
+                os.chmod(os.path.join(root, file),0o755)
+

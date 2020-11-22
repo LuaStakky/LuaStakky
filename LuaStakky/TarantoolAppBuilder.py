@@ -5,6 +5,7 @@ import os
 from typing import List, Dict
 from luaparser import ast
 from .Utils import gen_lua_path_part
+from .Exeptions import ETarantoolAdvancedAppLoopInRequirements
 
 
 def find_lua_global_functions(file):
@@ -89,17 +90,22 @@ class TarantoolTrivialAppEntry(TarantoolAppEntry):
 
 class TarantoolAdvancedAppEntry(TarantoolAppEntry):
     class TarantoolAppUnit(ConfigGenerator):
-        def __init__(self, conf, subconf, unit_conf, folder, open_calls, close_calls):
+        def __init__(self, conf, subconf, appconf, unit_conf, folder, open_calls, close_calls):
             self._conf = conf
+            self._appconf = appconf
             self._subconf = subconf
             self._unit_conf = unit_conf
             self._folder = folder
             self._out_config = []
             self.open_calls, self.close_calls = open_calls, close_calls
+            self.requirements=unit_conf['requirements'] if unit_conf.get("requirements", False) else []
 
         def analyse_config(self):
+            self._out_config.append("do")
+            self._out_config.append("local NeedAppendToGlobal={}")
+            self._out_config.append("local UnitEnv=GlobalEnv")
+
             for k, i in self._unit_conf["imports"].items():
-                self._out_config.append("unit=setmetatable({},{__index=global})")
                 all_files = []
                 for i0 in i["files"]:
                     if i0.endswith('/'):
@@ -112,86 +118,119 @@ class TarantoolAdvancedAppEntry(TarantoolAppEntry):
                     else:
                         all_files.append(os.path.join(self._folder, i0))
 
-                # iproto_visible: "none" # all, none or username (guest equal all)
-                # globals_visible: "global" # file, unit, global
-
-                if i["iproto_visible"] == "none":
-                    call_lists = []
-                elif i["tarantool_user"] in ["guest", "all"]:
-                    call_lists = [self.open_calls, self.close_calls]
-                else:
-                    call_lists = [self.close_calls]
+                iproto_visible = i.get("iproto_visible", 'none')
+                iproto_prefix = i.get("iproto_prefix", '')
+                globals_visible = i.get("globals_visible", 'file')
 
                 for i0 in all_files:
-                    if i["globals_visible"] == 'global':
-                        self._out_config.append('getmetatable(unit).__newindex = function(self, key, value)')
-                        self._out_config.append('    global[key]=value')
-                        self._out_config.append('end')
-                        env_name = "global"
-                    elif i["globals_visible"] == 'unit':
-                        env_name = "unit"
-                    else:
-                        self._out_config.append('''file=setmetatable({},{__index=unit})''')
-                        env_name = "file"
+                    self._out_config.append("local NewEnv={}")
+                    self._out_config.append("setmetatable(NewEnv,{__index=UnitEnv})")
 
                     file = open(i0, 'r').read()
                     i1 = 0
                     while file.find(']' + '=' * i1 + ']') != -1:
                         i1 = i1 + 1
 
-                    self._out_config.append('f=loadstring([' + '=' * i1 + '[' + file + ']' + '=' * i1 + '])')
-                    self._out_config.append('setfenv(f, ' + env_name + ')()')
+                    self._out_config.append('local f=loadstring([' + '=' * i1 + '[' + file + ']' + '=' * i1 + '])')
+                    self._out_config.append('setfenv(f, NewEnv)')
+                    self._out_config.append("f()")
 
-                    for name, params in find_lua_global_functions(file):
-                        for call_list in call_lists:
-                            call_list.add_call(name, params)
-                        self._out_config.append('AddFunction(' + name + ', ' + env_name + '.' + name + ', ' +
-                                                ('true' if i["iproto_visible"] in ["guest", "all"] else 'false') + ')')
+                    if globals_visible!='file':
+                        self._out_config.append("UnitEnv=NewEnv")
+                    if globals_visible=='global':
+                        self._out_config.append("NeedAppendToGlobal[#NeedAppendToGlobal+1]=NewEnv")
 
-                    if i["globals_visible"] == 'global':
-                        self._out_config.append('''getmetatable(unit).__newindex=nil''')
+                    if iproto_visible!='none':
+                        for name, params in find_lua_global_functions(file):
+                            iproto_name=iproto_prefix + name
+                            self.close_calls.add_call(iproto_name, params)
+                            if iproto_visible=='all':
+                                self.open_calls.add_call(iproto_name, params)
+                            self._out_config.append('AddFunction([[' + iproto_name + ']], NewEnv[ [[' + name + ']] ], ' +
+                                                    ('true' if iproto_visible == "all" else 'false') + ', NewEnv)')
+            self._out_config.append("for _,i in pairs(NeedAppendToGlobal) do")
+            self._out_config.append("local NewEnv=CopyTable(i)")
+            self._out_config.append("setmetatable(NewEnv,{__index=GlobalEnv})")
+            self._out_config.append("GlobalEnv=NewEnv")
+            self._out_config.append("end")
+            self._out_config.append("end")
 
         def render_config(self):
             return '\n'.join(self._out_config)
 
     def __init__(self, conf, subconf, folder):
         super().__init__(conf, subconf, folder)
-        self.open_calls = self.CallListGenerator(conf)
-        self.close_calls = self.CallListGenerator(conf)
+        self._open_calls = self.CallListGenerator(conf)
+        self._close_calls = self.CallListGenerator(conf)
         self._post_config = []
-        self.units: List[TarantoolAdvancedAppEntry.TarantoolAppUnit] = []
+        units: Dict[TarantoolAdvancedAppEntry.TarantoolAppUnit] = {}
         self._manifest = yaml_load(os.path.join(folder, subconf["main"]))
         for k, i in self._manifest["units"].items():
             unit_folder = os.path.join(folder, k)
-            self.units.append(self.TarantoolAppUnit(conf, subconf, yaml_load([
+            units[k]=self.TarantoolAppUnit(conf, subconf, self._manifest, yaml_load([
                 os.path.join(unit_folder, i["sub_manifest"])]) if i.get("sub_manifest", False) else i, unit_folder,
-                                                    self.open_calls, self.close_calls))
+                                           self._open_calls, self._close_calls)
+        # Topological Sorting(Tarjan algo)
+        self.units: List[TarantoolAdvancedAppEntry.TarantoolAppUnit] = []
+        stack = []
+        unprocessed = set(units.keys())
+        def recur(unit_name):
+            if unit_name in stack:
+                raise ETarantoolAdvancedAppLoopInRequirements()
+            stack.append(unit_name)
+            for un in units[unit_name].requirements:
+                if un in unprocessed:
+                    recur(un)
+            stack.pop()
+            self.units.append(units[unit_name])
+            unprocessed.remove(unit_name)
+        while len(unprocessed)>0:
+            recur(next(iter(unprocessed)))
+        self.units.reverse()
 
     def analyse_config(self):
         super().analyse_config()
-        self._pre_config.append("box.space._func:truncate()")
+        #self._pre_config.append("box.space._func:truncate()")
 
-        self._pre_config.append("local function AddFunction(Name, Function, allow_guest)")
+        self._pre_config.append('for _,i in box.space._func:pairs() do')
+        self._pre_config.append("  if i[5]=='LUA' then")
+        self._pre_config.append('    box.schema.func.drop(i[3],{if_exists=true})')
+        self._pre_config.append('  end')
+        self._pre_config.append('end')
+
+        self._pre_config.append("local function CopyTable(table)")
+        self._pre_config.append("    local Result={}")
+        self._pre_config.append("    for k,v in pairs(table) do")
+        self._pre_config.append("        Result[k]=v")
+        self._pre_config.append("    end")
+        self._pre_config.append("    return Result")
+        self._pre_config.append("end")
+
+        self._pre_config.append("local function AddFunction(Name, Function, allow_guest, Env)")
+        self._pre_config.append("    setfenv(Function,Env)")
         self._pre_config.append("    _G[Name]=Function")
+        self._pre_config.append("    box.schema.func.create(Name)")
         self._pre_config.append("    if allow_guest then")
-        self._pre_config.append("        box.schema.user.grant('', 'execute', 'function', Name, {if_not_exists=true})")
+        self._pre_config.append("        box.schema.user.grant('guest', 'execute', 'function', Name, {if_not_exists=true})")
+        self._pre_config.append("        box.schema.user.grant('admin', 'execute', 'function', Name, {if_not_exists=true})")
         self._pre_config.append("    else")
-        self._pre_config.append("        box.schema.user.revoke('', 'execute', 'function', Name, {if_not_exists=true})")
+        self._pre_config.append("        box.schema.user.revoke('guest', 'execute', 'function', Name, {if_not_exists=true})")
+        self._pre_config.append("        box.schema.user.grant('admin', 'execute', 'function', Name, {if_not_exists=true})")
         self._pre_config.append("    end")
         self._pre_config.append("end")
 
         # init env
-        self._pre_config.append("local file, unit, global")
-        self._pre_config.append("global={}")
+        self._pre_config.append("local GlobalEnv={}")
+        self._pre_config.append("setmetatable(GlobalEnv,{__index=_G})")
 
         for i in self.units:
             i.analyse_config()
 
     def get_open_call_list(self):
-        return self.open_calls
+        return self._open_calls
 
     def get_close_call_list(self):
-        return self.close_calls
+        return self._close_calls
 
     def render_config(self):
         return '\n'.join(self._pre_config+[i.render_config() for i in self.units]+self._post_config)
