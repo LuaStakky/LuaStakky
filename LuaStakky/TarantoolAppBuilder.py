@@ -140,8 +140,14 @@ class TarantoolAdvancedAppEntry(TarantoolAppEntry):
                     if globals_visible=='global':
                         self._out_config.append("NeedAppendToGlobal[#NeedAppendToGlobal+1]=NewEnv")
 
+<<<<<<< HEAD
+                    for name, params in find_lua_global_functions(file):
+                        self._out_config.append('setfenv(NewEnv[ [[' + name + ']] ],NewEnv)')
+                        if iproto_visible!='none':
+=======
                     if iproto_visible!='none':
                         for name, params in find_lua_global_functions(file):
+>>>>>>> 651bd93eca59baacbabd739827f8044fbba86af8
                             iproto_name=iproto_prefix + name
                             self.close_calls.add_call(iproto_name, params)
                             if iproto_visible=='all':
@@ -186,7 +192,10 @@ class TarantoolAdvancedAppEntry(TarantoolAppEntry):
             unprocessed.remove(unit_name)
         while len(unprocessed)>0:
             recur(next(iter(unprocessed)))
+<<<<<<< HEAD
+=======
         self.units.reverse()
+>>>>>>> 651bd93eca59baacbabd739827f8044fbba86af8
 
     def analyse_config(self):
         super().analyse_config()
@@ -207,7 +216,10 @@ class TarantoolAdvancedAppEntry(TarantoolAppEntry):
         self._pre_config.append("end")
 
         self._pre_config.append("local function AddFunction(Name, Function, allow_guest, Env)")
+<<<<<<< HEAD
+=======
         self._pre_config.append("    setfenv(Function,Env)")
+>>>>>>> 651bd93eca59baacbabd739827f8044fbba86af8
         self._pre_config.append("    _G[Name]=Function")
         self._pre_config.append("    box.schema.func.create(Name)")
         self._pre_config.append("    if allow_guest then")
