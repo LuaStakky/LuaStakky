@@ -42,7 +42,7 @@ class TarantoolAppEntry(ConfigGenerator, ABC):
         self._folder = folder
 
     def analyse_config(self):
-        lua_path = gen_lua_path_part('/opt/tarantool')+gen_lua_path_part('/opt/AutoGenModules')
+        lua_path = gen_lua_path_part('/opt/tarantool') + gen_lua_path_part('/opt/AutoGenModules')
         for i in self._subconf["mount_points"]["modules"]:
             lua_path = lua_path + gen_lua_path_part(
                 '/modules' + i if i.startswith(os.path.sep) else '/modules/' + i)
@@ -66,6 +66,7 @@ class TarantoolAppEntry(ConfigGenerator, ABC):
     @abstractmethod
     def get_close_call_list(self):
         pass
+
 
 class TarantoolTrivialAppEntry(TarantoolAppEntry):
     def __init__(self, conf, subconf, folder):
@@ -98,7 +99,7 @@ class TarantoolAdvancedAppEntry(TarantoolAppEntry):
             self._folder = folder
             self._out_config = []
             self.open_calls, self.close_calls = open_calls, close_calls
-            self.requirements=unit_conf['requirements'] if unit_conf.get("requirements", False) else []
+            self.requirements = unit_conf['requirements'] if unit_conf.get("requirements", False) else []
 
         def analyse_config(self):
             self._out_config.append("do")
@@ -118,6 +119,21 @@ class TarantoolAdvancedAppEntry(TarantoolAppEntry):
                     else:
                         all_files.append(os.path.join(self._folder, i0))
 
+                preloaded_data = i.get("preloaded_data", None)
+                if preloaded_data:
+                    self._out_config.append('local preloaded_data={')
+                    for var_name, var_data in preloaded_data.items():
+                        if var_data['type'] == 'file':
+                            with open(os.path.join(self._folder, var_data['file']), 'r') as f:
+                                text = f.read()
+                            i1 = 0
+                            while text.find(']' + '=' * i1 + ']') != -1:
+                                i1 = i1 + 1
+                            self._out_config.append(var_name + '=[' + '=' * i1 + '[' + text + ']' + '=' * i1 + '],')
+                    self._out_config.append('}')
+                else:
+                    self._out_config.append('local preloaded_data=nil')
+
                 iproto_visible = i.get("iproto_visible", 'none')
                 iproto_prefix = i.get("iproto_prefix", '')
                 globals_visible = i.get("globals_visible", 'file')
@@ -131,29 +147,27 @@ class TarantoolAdvancedAppEntry(TarantoolAppEntry):
                     while file.find(']' + '=' * i1 + ']') != -1:
                         i1 = i1 + 1
 
-                    self._out_config.append('local f=loadstring([' + '=' * i1 + '[' + file + ']' + '=' * i1 + '])')
+                    self._out_config.append('NewEnv.preloaded_data=preloaded_data')
+
+                    self._out_config.append('local f=loadstring([' + '=' * i1 + '[' + file + ']' + '=' * i1 + '],[['+i0[self._folder.rfind(os.path.sep)+1:]+']])')
                     self._out_config.append('setfenv(f, NewEnv)')
                     self._out_config.append("f()")
 
-                    if globals_visible!='file':
+                    if globals_visible != 'file':
                         self._out_config.append("UnitEnv=NewEnv")
-                    if globals_visible=='global':
+                    if globals_visible == 'global':
                         self._out_config.append("NeedAppendToGlobal[#NeedAppendToGlobal+1]=NewEnv")
 
-<<<<<<< HEAD
                     for name, params in find_lua_global_functions(file):
                         self._out_config.append('setfenv(NewEnv[ [[' + name + ']] ],NewEnv)')
-                        if iproto_visible!='none':
-=======
-                    if iproto_visible!='none':
-                        for name, params in find_lua_global_functions(file):
->>>>>>> 651bd93eca59baacbabd739827f8044fbba86af8
-                            iproto_name=iproto_prefix + name
+                        if iproto_visible != 'none':
+                            iproto_name = iproto_prefix + name
                             self.close_calls.add_call(iproto_name, params)
-                            if iproto_visible=='all':
+                            if iproto_visible == 'all':
                                 self.open_calls.add_call(iproto_name, params)
-                            self._out_config.append('AddFunction([[' + iproto_name + ']], NewEnv[ [[' + name + ']] ], ' +
-                                                    ('true' if iproto_visible == "all" else 'false') + ', NewEnv)')
+                            self._out_config.append(
+                                'AddFunction([[' + iproto_name + ']], NewEnv[ [[' + name + ']] ], ' +
+                                ('true' if iproto_visible == "all" else 'false') + ', NewEnv)')
             self._out_config.append("for _,i in pairs(NeedAppendToGlobal) do")
             self._out_config.append("local NewEnv=CopyTable(i)")
             self._out_config.append("setmetatable(NewEnv,{__index=GlobalEnv})")
@@ -173,13 +187,14 @@ class TarantoolAdvancedAppEntry(TarantoolAppEntry):
         self._manifest = yaml_load(os.path.join(folder, subconf["main"]))
         for k, i in self._manifest["units"].items():
             unit_folder = os.path.join(folder, k)
-            units[k]=self.TarantoolAppUnit(conf, subconf, self._manifest, yaml_load([
+            units[k] = self.TarantoolAppUnit(conf, subconf, self._manifest, yaml_load([
                 os.path.join(unit_folder, i["sub_manifest"])]) if i.get("sub_manifest", False) else i, unit_folder,
-                                           self._open_calls, self._close_calls)
+                                             self._open_calls, self._close_calls)
         # Topological Sorting(Tarjan algo)
         self.units: List[TarantoolAdvancedAppEntry.TarantoolAppUnit] = []
         stack = []
         unprocessed = set(units.keys())
+
         def recur(unit_name):
             if unit_name in stack:
                 raise ETarantoolAdvancedAppLoopInRequirements()
@@ -190,16 +205,13 @@ class TarantoolAdvancedAppEntry(TarantoolAppEntry):
             stack.pop()
             self.units.append(units[unit_name])
             unprocessed.remove(unit_name)
-        while len(unprocessed)>0:
+
+        while len(unprocessed) > 0:
             recur(next(iter(unprocessed)))
-<<<<<<< HEAD
-=======
-        self.units.reverse()
->>>>>>> 651bd93eca59baacbabd739827f8044fbba86af8
 
     def analyse_config(self):
         super().analyse_config()
-        #self._pre_config.append("box.space._func:truncate()")
+        # self._pre_config.append("box.space._func:truncate()")
 
         self._pre_config.append('for _,i in box.space._func:pairs() do')
         self._pre_config.append("  if i[5]=='LUA' then")
@@ -216,18 +228,18 @@ class TarantoolAdvancedAppEntry(TarantoolAppEntry):
         self._pre_config.append("end")
 
         self._pre_config.append("local function AddFunction(Name, Function, allow_guest, Env)")
-<<<<<<< HEAD
-=======
-        self._pre_config.append("    setfenv(Function,Env)")
->>>>>>> 651bd93eca59baacbabd739827f8044fbba86af8
         self._pre_config.append("    _G[Name]=Function")
         self._pre_config.append("    box.schema.func.create(Name)")
         self._pre_config.append("    if allow_guest then")
-        self._pre_config.append("        box.schema.user.grant('guest', 'execute', 'function', Name, {if_not_exists=true})")
-        self._pre_config.append("        box.schema.user.grant('admin', 'execute', 'function', Name, {if_not_exists=true})")
+        self._pre_config.append(
+            "        box.schema.user.grant('guest', 'execute', 'function', Name, {if_not_exists=true})")
+        self._pre_config.append(
+            "        box.schema.user.grant('admin', 'execute', 'function', Name, {if_not_exists=true})")
         self._pre_config.append("    else")
-        self._pre_config.append("        box.schema.user.revoke('guest', 'execute', 'function', Name, {if_not_exists=true})")
-        self._pre_config.append("        box.schema.user.grant('admin', 'execute', 'function', Name, {if_not_exists=true})")
+        self._pre_config.append(
+            "        box.schema.user.revoke('guest', 'execute', 'function', Name, {if_not_exists=true})")
+        self._pre_config.append(
+            "        box.schema.user.grant('admin', 'execute', 'function', Name, {if_not_exists=true})")
         self._pre_config.append("    end")
         self._pre_config.append("end")
 
@@ -245,4 +257,4 @@ class TarantoolAdvancedAppEntry(TarantoolAppEntry):
         return self._close_calls
 
     def render_config(self):
-        return '\n'.join(self._pre_config+[i.render_config() for i in self.units]+self._post_config)
+        return '\n'.join(self._pre_config + [i.render_config() for i in self.units] + self._post_config)

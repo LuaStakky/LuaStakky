@@ -211,7 +211,7 @@ class FsController:
     def post_build_hook():
         for root, dirs, files in os.walk('.build/'):
             for dir in dirs:
-                os.chmod(os.path.join(root, dir),0o755)
+                os.chmod(os.path.join(root, dir), 0o755)
             for file in files:
-                os.chmod(os.path.join(root, file),0o755)
+                os.chmod(os.path.join(root, file), 0o755)
 

@@ -10,7 +10,9 @@ LuaStakky - full stack lua web framework
     * lua-resty-http
     * lua-resty-cookie
 + Tarantool (DB)
-+ fengari (js lua implementation)
+    * Trivial app (as classic 1 main lua file+ lua modules)
+    * Advanced app (custom build system with microservice architecture)
++ fengari (js lua implementation) *WIP*
 
 ## License
 [MIT](https://choosealicense.com/licenses/mit/)
