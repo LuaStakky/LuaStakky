@@ -14,5 +14,10 @@ LuaStakky - full stack lua web framework
     * Advanced app (custom build system with microservice architecture)
 + fengari (js lua implementation) *WIP*
 
+## Some usefull examples
+
+* [Example-Management](https://github.com/LuaStakky/Example-Management) and [GUI for it](https://github.com/LuaStakky/Example-Management-DesktopGUI).
+  This example show advanced build system for tarantool.
+
 ## License
 [MIT](https://choosealicense.com/licenses/mit/)
