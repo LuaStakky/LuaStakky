@@ -25,10 +25,10 @@ services:
         delay: nodelay
         type: ip
         mem: 10m
-      /api/ResetPassword:
-        rps: 2
-        burst: 0
-        delay: 0
+      #/api/ResetPassword:
+      #  rps: 2
+      #  burst: 0
+      #  delay: 0
       #default values
         #rps: 10
         #burst: 20
@@ -50,6 +50,7 @@ services:
         - lua-resty-mail
         - lua-resty-cookie
         #- luaminify
+    # if "main: none" then web_data mounts as static
     main: Main.lua
     mount_points:
       web_data: WebData

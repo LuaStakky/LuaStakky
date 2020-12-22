@@ -95,9 +95,10 @@ class StakkyNginx(StakkyContainerModule):
 
                 access_control = server.get_access_control()
                 if access_control:
-                    self.add_param(['access_by_lua', "'"+access_control.replace('\\', '\\\\').replace("'", "\\'")+"'"])
+                    self.add_param(
+                        ['access_by_lua', "'" + access_control.replace('\\', '\\\\').replace("'", "\\'") + "'"])
                 self.add_param(['access_log', 'off'])
-                self.add_param(['proxy_pass', 'http://'+container.service_name+'/'])
+                self.add_param(['proxy_pass', 'http://' + container.service_name + '/'])
 
                 self.end_section()
                 self.end_section()
@@ -162,7 +163,8 @@ class StakkyNginx(StakkyContainerModule):
             self.add_param(['root', "'/Site'"])
             if self._conf["debug"]:
                 self.add_param(['lua_code_cache', 'off'])
-            self.add_param(['rewrite_by_lua_file', '"' + path.join('/App', self._subconf['main']) + '"'])
+            if self._subconf['main'] != 'none':
+                self.add_param(['rewrite_by_lua_file', '"' + path.join('/App', self._subconf['main']) + '"'])
             self.end_section()
 
             self.end_section()
@@ -320,7 +322,7 @@ class StakkyNginx(StakkyContainerModule):
 
             mounts = []
             for k, i in self.mount_points.items():
-                mounts.append(('' if k.startswith(('/', './')) else './')+k + ':' + i)
+                mounts.append(('' if k.startswith(('/', './')) else './') + k + ':' + i)
             self.add_param(['volumes', mounts])
 
     priority = -1000
@@ -345,8 +347,9 @@ class StakkyNginx(StakkyContainerModule):
             if isinstance(service, StakkySubdomainContainerModule):
                 self.config_generators['Nginx.conf'].config.redirect_servers.append(service)
             if isinstance(service, StakkyTarantool):
-                self.config_generators.add(path.join(self.auto_gen_modules_dir.get_build_alias(), 'TarantoolApi_Calls.lua'),
-                                           service.config_generators['TarantoolEntry.lua'].config.get_open_call_list())
+                self.config_generators.add(
+                    path.join(self.auto_gen_modules_dir.get_build_alias(), 'TarantoolApi_Calls.lua'),
+                    service.config_generators['TarantoolEntry.lua'].config.get_open_call_list())
             for i in service.get_containers():
                 self._depends.append(i.service_name)
 
