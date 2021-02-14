@@ -19,5 +19,9 @@ LuaStakky - full stack lua web framework
 * [Example-Management](https://github.com/LuaStakky/Example-Management) and [GUI for it](https://github.com/LuaStakky/Example-Management-DesktopGUI).
   This example show advanced build system for tarantool.
 
+## Official templates
+
+* [LuaStakkyStaticTemplate](https://github.com/LuaStakky/LuaStakkyStaticTemplate)
+
 ## License
 [MIT](https://choosealicense.com/licenses/mit/)
