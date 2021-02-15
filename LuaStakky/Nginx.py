@@ -103,6 +103,35 @@ class StakkyNginx(StakkyContainerModule):
                 self.end_section()
                 self.end_section()
 
+        def _mk_cors(self, cors):
+            def add_not_none(name_end, req_type):
+                value = req_type[name_end]
+                if value != 'none':
+                    self.add_param(['add_header', "Access-Control-" + name_end, value])
+
+            if cors['enable']:
+                simple, preflighted = cors['simple'], cors['preflighted']
+                two_if = not ((simple['Allow-Origin'] in {preflighted['Allow-Origin'], 'none'}) and
+                              (simple['Expose-Headers'] in {preflighted['Expose-Headers'], 'none'}))
+                if two_if:
+                    self.begin_section(['if', "($request_method != 'OPTIONS')"])
+                add_not_none('Allow-Origin', simple)
+                add_not_none('Expose-Headers', simple)
+                if two_if:
+                    self.end_section()
+                self.begin_section(['if', "($request_method = 'OPTIONS')"])
+                if simple['Allow-Origin'] == 'none' or two_if:
+                    add_not_none('Allow-Origin', preflighted)
+                if simple['Expose-Headers'] == 'none' or two_if:
+                    add_not_none('Expose-Headers', preflighted)
+                add_not_none('Allow-Methods', preflighted)
+                add_not_none('Allow-Headers', preflighted)
+                add_not_none('Max-Age', preflighted)
+                self.add_param(['add_header', "'Content-Type'", "'text/plain; charset=utf-8'"])
+                self.add_param(['add_header', "'Content-Length'", 0])
+                self.add_param(['return', 204])
+                self.end_section()
+
         def _mk_main_server(self, http, https, local=False):
             if local:
                 http = True
@@ -112,8 +141,8 @@ class StakkyNginx(StakkyContainerModule):
                 self.add_param(['ssl_certificate', 'Certificates'])
                 self.add_param(['ssl_certificate_key', 'Certificates'])
                 self.add_param(['ssl_protocols', 'SSLv2', 'SSLv3', 'TLSv1', 'TLSv1.1', 'TLSv1.2'])
-                self.add_param(
-                    ['ssl_session_cache', 'shared:SSL:' + str(self._subconf['security']['ssl_session_cache']) + 'm'])
+                self.add_param(['ssl_session_cache',
+                                'shared:SSL:' + str(self._subconf['security']['ssl_session_cache']) + 'm'])
             self.add_param(['resolver', '127.0.0.11', '8.8.8.8', 'ipv6=off'])
             self.add_param(['charset', 'utf-8'])
 
@@ -127,17 +156,8 @@ class StakkyNginx(StakkyContainerModule):
                 self.add_param(['limit_req_log_level', 'warn'])
                 self.add_param(['limit_req_status', '429'])
 
-                # Access-Control
-                self.add_param(['add_header', "'Access-Control-Allow-Methods'", "'GET, POST, OPTIONS'", "always"])
-                self.begin_section(['if', "($request_method = 'OPTIONS')"])
-                self.add_param(['add_header', "'Access-Control-Allow-Methods'", "'GET, POST, OPTIONS'"])
-                self.add_param(['add_header', "'Access-Control-Allow-Headers'",
-                                "'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range'"])
-                self.add_param(['add_header', "'Access-Control-Max-Age'", 1728000])
-                self.add_param(['add_header', "'Content-Type'", "'text/plain; charset=utf-8'"])
-                self.add_param(['add_header', "'Content-Length'", 0])
-                self.add_param(['return', 204])
-                self.end_section()
+                # CORS
+                self._mk_cors(self._subconf['cors'])
 
                 for k, i in self._limits.items():
                     if k != '/':
@@ -161,9 +181,9 @@ class StakkyNginx(StakkyContainerModule):
 
             self.begin_section(['location', '/'])
             self.add_param(['root', "'/Site'"])
-            if self._conf["debug"]:
-                self.add_param(['lua_code_cache', 'off'])
             if self._subconf['main'] != 'none':
+                if self._conf["debug"]:
+                    self.add_param(['lua_code_cache', 'off'])
                 self.add_param(['rewrite_by_lua_file', '"' + path.join('/App', self._subconf['main']) + '"'])
             self.end_section()
 
@@ -205,7 +225,8 @@ class StakkyNginx(StakkyContainerModule):
                 #}
             '''
             self._mk_main_server(not need_http_redirect, can_ssl)
-            self._mk_main_server(True, False, local=True)
+            if self._subconf['local_server'] and self._subconf['main']:
+                self._mk_main_server(True, False, local=True)
             for i in self.redirect_servers:
                 self._mk_redirect_server(i)
 
@@ -256,9 +277,10 @@ class StakkyNginx(StakkyContainerModule):
                 i0 = i0 + 1
 
             lua_package_path = '"'
-            for i in self._subconf['mount_points']['modules']:
-                lua_package_path = lua_package_path + gen_lua_path_part(
-                    '/modules' + i if i.startswith(path.sep) else '/modules/' + i)
+            if self._subconf['main'] != 'none':
+                for i in self._subconf['mount_points']['modules']:
+                    lua_package_path = lua_package_path + gen_lua_path_part(
+                        '/modules' + i if i.startswith(path.sep) else '/modules/' + i)
             for i in ['/AutoGenModules', '/App', '/usr/share/lua/']:
                 lua_package_path = lua_package_path + gen_lua_path_part(i)
             self.add_param(['lua_package_path', lua_package_path + ';"'])
@@ -358,14 +380,15 @@ class StakkyNginx(StakkyContainerModule):
             self.cacert_file.get_project_alias(): '/etc/nginx/cacert.pem',
             self.config_generators['Nginx.conf'].get_project_alias(): '/etc/nginx/nginx.conf',
             self.auto_gen_modules_dir.get_project_alias(): '/AutoGenModules',
-            self._subconf['mount_points']['app']: '/App',
             self._subconf['mount_points']['web_data']: '/Site'
         }
         if self._subconf['security']['allow_https'] and self._subconf['security']['ssl_certificates_file'] != 'none':
             result[self._subconf['security']['ssl_certificates_file']] = '/etc/nginx/Certificates'
 
-        for i in self._subconf['mount_points']['modules']:
-            result[i] = '/modules' + i if i.startswith(path.sep) else '/modules/' + i
+        if self._subconf['main'] != 'none':
+            result[self._subconf['mount_points']['app']] = '/App',
+            for i in self._subconf['mount_points']['modules']:
+                result[i] = '/modules' + i if i.startswith(path.sep) else '/modules/' + i
 
         self.config_generators['DockerfileNginx'].config.mount_points = result
         if self._conf['debug']:

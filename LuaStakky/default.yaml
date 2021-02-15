@@ -52,11 +52,24 @@ services:
         #- luaminify
     # if "main: none" then web_data mounts as static
     main: Main.lua
+    local_server: false # when true - create local http server to access from tarantool, it will be ignored when "main: none"
     mount_points:
       web_data: WebData
       app: OpenRestyApp
       modules:
         - OpenRestyModules
+    cors:
+      enable: true
+      simple: # See https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#simple_requests
+        Allow-Origin: '*' # Use none to disable header sending
+        Expose-Headers: '*'
+      preflighted: # See https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS#preflighted_requests
+        Allow-Origin: '*'
+        Expose-Headers: '*'
+        Allow-Methods: '*'
+        Allow-Headers: '*'
+        Max-Age: 1728000
+
   Tarantool:
     net:
       iproto_port: 3301
