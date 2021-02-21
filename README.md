@@ -21,6 +21,7 @@ LuaStakky - full stack lua web framework
 
 ## Official templates
 
+* [LuaStakkyStaticSimpleAppTemplate](https://github.com/LuaStakky/LuaStakkyStaticSimpleAppTemplate)
 * [LuaStakkyStaticTemplate](https://github.com/LuaStakky/LuaStakkyStaticTemplate)
 
 ## License
