@@ -33,6 +33,14 @@ setuptools.setup(
         "Topic :: Software Development :: Libraries",
         "Topic :: Software Development :: Libraries :: Application Frameworks"
     ],
+    entry_points={
+        'console_scripts': [
+            'stakky=LuaStakky',
+        ],
+    },
+    package_data={
+        "": ["default.yaml"]
+    },
     packages=setuptools.find_packages(),
     python_requires=">=3.6"
 )
