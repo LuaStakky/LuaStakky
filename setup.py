@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
     name="LuaStakky",
-    version="0.1.0",
+    version="0.1.2",
     author="Artem3213212",
     author_email="artem@agteam.dev",
     description="Full stack lua web framework",
@@ -35,7 +35,7 @@ setuptools.setup(
     ],
     entry_points={
         'console_scripts': [
-            'stakky=LuaStakky',
+            'stakky=LuaStakky.__main__:entry',
         ],
     },
     package_data={
