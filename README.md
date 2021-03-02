@@ -9,10 +9,16 @@ LuaStakky - full stack lua web framework
     * inspect
     * lua-resty-http
     * lua-resty-cookie
-+ Tarantool (DB)
++ Tarantool (DB) with 2 build modes:
     * Trivial app (as classic 1 main lua file+ lua modules)
     * Advanced app (custom build system with microservice architecture)
 + fengari (js lua implementation) *WIP*
+
+## Installation
+
+Install docker on your system before.
+
+    pip3 install LuaStakky
 
 ## Some usefull examples
 
