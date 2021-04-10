@@ -182,6 +182,7 @@ class FsController:
         self._reload_gitignore()
         self.try_add_to_gitignore('.build/')
         self.try_add_to_gitignore('DB/admin.sock1')
+        self.try_create_folder('DB')
         for i in ['DB/MemTX', 'DB/WAL', 'DB/Vinyl']:
             self.try_add_to_gitignore(i)
             self.try_create_folder(i)
