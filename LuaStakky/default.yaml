@@ -71,8 +71,6 @@ services:
         Max-Age: 1728000
 
   Tarantool:
-    net:
-      iproto_port: 3301
     #worker_processes: 12
     #worker_connections: 8192
     #keepalive_timeout: 75

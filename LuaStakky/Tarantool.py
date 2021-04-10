@@ -33,8 +33,8 @@ class StakkyTarantool(StakkyContainerModule):
         def analyse_config(self):
             self.build_by_dockerfile(self._generators['DockerfileTarantool'])
 
-            self.add_param(['ports', [str(self._subconf["net"]["iproto_port"]) + ":3301"]])
-            # depends_on: tarantool, admin-panel
+            if self._subconf["net"]["iproto_port"] != 'off':
+                self.add_param(['ports', [str(self._subconf["net"]["iproto_port"]) + ":3301"]])
 
             mounts = ['./DB:/var/lib/tarantool']
             for k, i in self.mount_points.items():
